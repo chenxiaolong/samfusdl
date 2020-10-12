@@ -1,0 +1,9 @@
+[package]
+name = "progresslib"
+version = "0.1.0"
+authors = ["Andrew Gunnerson <chillermillerlong@hotmail.com>"]
+edition = "2018"
+
+[dependencies]
+crossterm = "0.18.0"
+number_prefix = "0.4.0"

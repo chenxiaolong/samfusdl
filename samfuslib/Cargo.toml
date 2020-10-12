@@ -1,0 +1,27 @@
+[package]
+name = "samfuslib"
+version = "0.1.0"
+authors = ["Andrew Gunnerson <chillermillerlong@hotmail.com>"]
+edition = "2018"
+
+[dependencies]
+aes-soft = "0.5.0"
+base64 = "0.13.0"
+block-cipher = "0.8.0"
+block-modes = "0.6.1"
+block-padding = "0.2.1"
+bytes = "0.5.6"
+cfg-if = "1.0.0"
+futures-core = "0.3.5"
+hex-literal = "0.3.1"
+log = "0.4.11"
+md5 = "0.7.0"
+reqwest = { version = "0.10.8", features = ["cookies", "stream"] }
+thiserror = "1.0.20"
+xmltree = "0.10.1"
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
+aesni = { version = "0.9.0", features = ["nocheck"] }
+
+[dev-dependencies]
+assert_matches = "1.4.0"

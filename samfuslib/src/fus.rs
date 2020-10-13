@@ -295,6 +295,30 @@ impl FirmwareInfo {
     }
 }
 
+/// Builder type for creating FUS clients with non-default behavior.
+#[derive(Clone, Default)]
+pub struct FusClientBuilder {
+    ignore_tls_validation: bool,
+}
+
+impl FusClientBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Ignore TLS certificate validation when performing HTTPS requests. By
+    /// default, TLS certificate validation is enabled.
+    pub fn ignore_tls_validation(mut self, value: bool) -> Self {
+        self.ignore_tls_validation = value;
+        self
+    }
+
+    /// Build the FUS client with the current options.
+    pub fn build(&self) -> Result<FusClient, FusError> {
+        FusClient::with_options(self)
+    }
+}
+
 /// Type for interacting with the FUS service.
 pub struct FusClient {
     client: reqwest::Client,
@@ -302,11 +326,11 @@ pub struct FusClient {
 }
 
 impl FusClient {
-    /// Builds a new FUS client object. This function fails if the TLS backend
-    /// fails to initialize.
-    pub fn new() -> Result<Self, FusError> {
+    /// Build a new FUS client object with the options from the specified
+    /// builder.
+    fn with_options(options: &FusClientBuilder) -> Result<Self, FusError> {
         let client = reqwest::ClientBuilder::new()
-            .danger_accept_invalid_certs(true) // TODO
+            .danger_accept_invalid_certs(options.ignore_tls_validation)
             .cookie_store(true)
             .referer(false)
             .build()?;
@@ -315,6 +339,12 @@ impl FusClient {
             client,
             nonce: None,
         })
+    }
+
+    /// Builds a new FUS client object. This function fails if the TLS backend
+    /// fails to initialize.
+    pub fn new() -> Result<Self, FusError> {
+        Self::with_options(&Default::default())
     }
 
     /// Get the latest available firmware version for a given model number and

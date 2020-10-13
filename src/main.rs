@@ -416,6 +416,23 @@ fn create_progress_bar(len: u64) -> ProgressBar<Stderr> {
     bar
 }
 
+/// Open a file, creating it if it doesn't already exist. Returns the file
+/// handle and whether the file existed.
+fn open_or_create(options: &OpenOptions, path: &Path) -> Result<(File, bool)> {
+    match options.open(path) {
+        Ok(f) => Ok((f, true)),
+        Err(e) => {
+            let r = if e.kind() != io::ErrorKind::NotFound {
+                Err(e)
+            } else {
+                options.clone().create(true).open(path)
+            };
+
+            Ok((r.context(format!("Could not open file: {:?}", path))?, false))
+        }
+    }
+}
+
 /// Delete a file, but don't error out if the path doesn't exist.
 fn delete_if_exists(path: &Path) -> Result<()> {
     if let Err(e) = fs::remove_file(path) {
@@ -584,14 +601,11 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let mut resuming = false;
-
     // Try to open the state file or split into evenly sized chunks
-    let chunks = match DownloadState::read_file(&state_path) {
+    let (chunks, resuming) = match DownloadState::read_file(&state_path) {
         Ok(mut s) => {
             debug!("Validating state file data: {:?}", s);
 
-            resuming = true;
             s.remaining.sort();
 
             if !s.remaining.windows(2).all(|w| {
@@ -605,14 +619,14 @@ async fn main() -> Result<()> {
                 ));
             }
 
-            s.to_ranges()
+            (s.to_ranges(), true)
         }
         Err(e) => {
             match e.downcast_ref::<io::Error>() {
                 Some(e) if e.kind() == io::ErrorKind::NotFound => {
                     debug!("No existing state file found");
 
-                    split_range(0..info.size, opts.chunks.0, Some(MIN_CHUNK_SIZE))
+                    (split_range(0..info.size, opts.chunks.0, Some(MIN_CHUNK_SIZE)), false)
                 }
                 _ => return Err(e).context(format!(
                     "Error when opening state file: {:?}", state_path)),
@@ -620,20 +634,15 @@ async fn main() -> Result<()> {
         }
     };
 
-    let mut file: Option<File> = None;
+    // Try to open existing download
+    let (file, existed) = open_or_create(
+        OpenOptions::new().read(true).write(true), &download_path)?;
 
-    if resuming || !download_path.exists() {
+    if resuming || !existed {
         debug!("Download ranges: {:#?}", chunks);
 
-        let f = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(&download_path)
-            .context(format!("Could not open file: {:?}", download_path))?;
-
         let remaining_chunks = download_chunks(
-            f.try_clone().context("Could not duplicate file handle")?,
+            file.try_clone().context("Could not duplicate file handle")?,
             info.clone(),
             &chunks,
             opts.retries,
@@ -649,13 +658,8 @@ async fn main() -> Result<()> {
         }
 
         delete_if_exists(&state_path)?;
-
-        file = Some(f);
     }
 
-    // File is only previously opened if a download occurred.
-    let file = file.unwrap_or(File::open(&download_path)
-        .context(format!("Could not open file: {:?}", download_path))?);
     let decrypted_file = File::create(&temp_path)
         .context(format!("Could not open file: {:?}", temp_path))?;
 

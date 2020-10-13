@@ -81,6 +81,12 @@ pub fn rename_atomic(src: &Path, dest: &Path) -> io::Result<()> {
         .chain(iter::once(0))
         .collect();
 
+    // Make sure the filename contains no embedded \u0000
+    if buf[base_size_wchars..buf.len() - 1].contains(&0) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            "Destination filename contains \\u{0000}"));
+    }
+
     // No NULL-terminator
     let filename_wchars = buf.len() - base_size_wchars - 1;
 

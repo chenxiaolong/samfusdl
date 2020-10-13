@@ -1,3 +1,5 @@
+mod file;
+
 use std::{
     cmp,
     fmt,
@@ -24,10 +26,11 @@ use tokio::{
 
 use progresslib::{ProgressBar, ProgressDrawMode};
 use samfuslib::crypto::FusFileAes128;
-use samfuslib::file::write_all_at;
 use samfuslib::fus::{FirmwareInfo, FusClient};
 use samfuslib::range::split_range;
 use samfuslib::version::FwVersion;
+
+use file::{rename_atomic, write_all_at};
 
 const PKG_NAME: &str = env!("CARGO_PKG_NAME");
 const STATE_EXT: &str = concat!(env!("CARGO_PKG_NAME"), "_state");
@@ -664,7 +667,7 @@ async fn main() -> Result<()> {
         delete_if_exists(&download_path)?;
     }
 
-    fs::rename(&temp_path, &output_path)
+    rename_atomic(&temp_path, &output_path)
         .context(format!("Could not move {:?} to {:?}", temp_path, output_path))?;
 
     Ok(())

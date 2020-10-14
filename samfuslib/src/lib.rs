@@ -1,4 +1,3 @@
-pub mod constants;
 pub mod crypto;
 pub mod fus;
 pub mod range;

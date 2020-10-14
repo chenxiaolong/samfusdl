@@ -1,6 +1,7 @@
-use crate::constants::{FIXED_KEY, FLEXIBLE_KEY_SUFFIX};
-
-use std::cmp;
+use std::{
+    cmp,
+    convert::TryInto,
+};
 
 use block_cipher::generic_array::GenericArray;
 use block_modes::{BlockMode, Cbc, Ecb};
@@ -14,8 +15,54 @@ pub const KEY_SIZE: usize = 32;
 
 #[derive(Debug, Error)]
 pub enum CryptoError {
+    #[error("Fixed key has incorrect length")]
+    IncorrectFixedKeyLength,
+    #[error("Flexible key suffix has incorrect length")]
+    IncorrectFlexibleKeySuffixLength,
     #[error("Ciphertext is smaller than block size")]
     CiphertextTooSmall,
+}
+
+/// Container for holding FUS encryption keys.
+#[derive(Clone, Debug)]
+pub struct FusKeys {
+    pub fixed_key: [u8; 32],
+    pub flexible_key_suffix: [u8; 16],
+}
+
+impl FusKeys {
+    /// Load keys from the specified byte slices. The fixed key should be 32
+    /// bytes and the flexible key suffix should be 16 bytes.
+    pub fn new(
+        fixed_key: &[u8],
+        flexible_key_suffix: &[u8],
+    ) -> Result<Self, CryptoError> {
+        Ok(Self {
+            fixed_key: fixed_key.try_into()
+                .map_err(|_| CryptoError::IncorrectFixedKeyLength)?,
+            flexible_key_suffix: flexible_key_suffix.try_into()
+                .map_err(|_| CryptoError::IncorrectFlexibleKeySuffixLength)?,
+        })
+    }
+
+    /// Derive the FUS "flexible key" from a list of indexes of the fixed key +
+    /// a hardcoded suffix.
+    pub fn get_flexible_key_from_indexes(&self, key_indexes: &[usize]) -> Vec<u8> {
+        key_indexes.iter()
+            .map(|i| self.fixed_key[*i])
+            .chain(self.flexible_key_suffix.iter().copied())
+            .collect()
+    }
+
+    /// Derive the FUS "flexible key" from the given base. Mod 16 is applied to
+    /// each element to form the fixed key index list.
+    pub fn get_flexible_key(&self, key_base: &[u8]) -> Vec<u8> {
+        let indexes: Vec<usize> = key_base.iter()
+            .map(|x| (x % 16) as usize)
+            .collect();
+
+        self.get_flexible_key_from_indexes(&indexes)
+    }
 }
 
 /// Pad byte array to specified block size and optionally truncate to one block.
@@ -109,25 +156,6 @@ impl FusAes256 {
     }
 }
 
-/// Derive the FUS "flexible key" from a list of indexes of the fixed key + a
-/// a hardcoded suffix.
-pub fn get_flexible_key_from_indexes(key_indexes: &[usize]) -> Vec<u8> {
-    key_indexes.iter()
-        .map(|i| FIXED_KEY[*i])
-        .chain(FLEXIBLE_KEY_SUFFIX.iter().copied())
-        .collect()
-}
-
-/// Derive the FUS "flexible key" from the given base. Mod 16 is applied to each
-/// element to form the fixed key index list.
-pub fn get_flexible_key(key_base: &[u8]) -> Vec<u8> {
-    let indexes: Vec<usize> = key_base.iter()
-        .map(|x| (x % 16) as usize)
-        .collect();
-
-    get_flexible_key_from_indexes(&indexes)
-}
-
 /// Type for decrypting files downloaded from FUS. This is just normal
 /// AES128-ECB with no padding.
 ///
@@ -199,6 +227,20 @@ mod tests {
     }
 
     #[test]
+    fn test_create_flexible_key() {
+        let keys = FusKeys::new(
+            b"testing_testing_testing_testing_",
+            b"testing_testing_",
+        ).unwrap();
+
+        assert_eq!(keys.get_flexible_key_from_indexes(&[]), b"testing_testing_");
+        assert_eq!(keys.get_flexible_key_from_indexes(&[1, 2, 3]), b"esttesting_testing_");
+
+        assert_eq!(keys.get_flexible_key(b""), b"testing_testing_");
+        assert_eq!(keys.get_flexible_key(b"abc"), b"esttesting_testing_");
+    }
+
+    #[test]
     fn test_encrypt() {
         // Key smaller than IV length
         assert_eq!(FusAes256::new(b"testing_").encrypt(b""),
@@ -246,14 +288,5 @@ mod tests {
         assert_matches!(FusAes256::new(b"testing_testing_")
                             .decrypt(&hex!("ea016b97268c45b6201797452df6c688a70500f3e18d557474c10a55758b07d9")),
                         Ok(x) if x == hex!("74657374696e675f74657374696e675f"));
-    }
-
-    #[test]
-    fn test_create_flexible_key() {
-        assert_eq!(get_flexible_key_from_indexes(&[]), b"w13r4cvf4hctaujv");
-        assert_eq!(get_flexible_key_from_indexes(&[1, 2, 3]), b"qzdw13r4cvf4hctaujv");
-
-        assert_eq!(get_flexible_key(b""), b"w13r4cvf4hctaujv");
-        assert_eq!(get_flexible_key(b"abc"), b"qzdw13r4cvf4hctaujv");
     }
 }

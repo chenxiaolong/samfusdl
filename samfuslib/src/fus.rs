@@ -1,6 +1,5 @@
 use crate::{
-    constants::FIXED_KEY,
-    crypto::{CryptoError, FusAes256, get_flexible_key},
+    crypto::{CryptoError, FusAes256, FusKeys},
     version::{FwVersion, ParseFwVersionError},
 };
 
@@ -153,29 +152,29 @@ impl Nonce {
     }
 
     /// Create instance from a fixed-key-encrypted nonce value.
-    pub fn from_encrypted(data: &[u8]) -> Result<Self, FusError> {
+    pub fn from_encrypted(keys: &FusKeys, data: &[u8]) -> Result<Self, FusError> {
         let decoded = base64::decode(data)?;
-        let plaintext = FusAes256::new(FIXED_KEY).decrypt(&decoded)?;
+        let plaintext = FusAes256::new(&keys.fixed_key).decrypt(&decoded)?;
         Nonce::from_slice(&plaintext)
     }
 
     /// Convert nonce to fixed-key-encrypted nonce.
-    pub fn to_encrypted(&self) -> String {
-        base64::encode(FusAes256::new(FIXED_KEY).encrypt(&self.data))
+    pub fn to_encrypted(&self, keys: &FusKeys) -> String {
+        base64::encode(FusAes256::new(&keys.fixed_key).encrypt(&self.data))
     }
 
     /// Get the nonce signature to be used in the Authorization header for FUS
     /// requests.
-    fn to_signature(&self) -> String {
-        let key = get_flexible_key(self.as_slice());
+    fn to_signature(&self, keys: &FusKeys) -> String {
+        let key = keys.get_flexible_key(self.as_slice());
         let ciphertext = FusAes256::new(&key).encrypt(self.as_slice());
 
         base64::encode(ciphertext)
     }
 
     /// Get full Authorization header value containing the nonce signature.
-    fn to_authorization(&self) -> Authorization {
-        Authorization::with_signature(&self.to_signature())
+    fn to_authorization(&self, keys: &FusKeys) -> Authorization {
+        Authorization::with_signature(&self.to_signature(keys))
     }
 
     /// Get the scrambled nonce value to be used in the <LOGIC_CHECK> XML tag of
@@ -296,14 +295,18 @@ impl FirmwareInfo {
 }
 
 /// Builder type for creating FUS clients with non-default behavior.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct FusClientBuilder {
+    keys: FusKeys,
     ignore_tls_validation: bool,
 }
 
 impl FusClientBuilder {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(keys: FusKeys) -> Self {
+        Self {
+            keys,
+            ignore_tls_validation: false,
+        }
     }
 
     /// Ignore TLS certificate validation when performing HTTPS requests. By
@@ -313,7 +316,8 @@ impl FusClientBuilder {
         self
     }
 
-    /// Build the FUS client with the current options.
+    /// Build the FUS client with the current options. This function fails if
+    /// the TLS backend fails to initialize.
     pub fn build(&self) -> Result<FusClient, FusError> {
         FusClient::with_options(self)
     }
@@ -322,6 +326,7 @@ impl FusClientBuilder {
 /// Type for interacting with the FUS service.
 pub struct FusClient {
     client: reqwest::Client,
+    keys: FusKeys,
     nonce: Option<Nonce>,
 }
 
@@ -337,14 +342,9 @@ impl FusClient {
 
         Ok(Self {
             client,
+            keys: options.keys.clone(),
             nonce: None,
         })
-    }
-
-    /// Builds a new FUS client object. This function fails if the TLS backend
-    /// fails to initialize.
-    pub fn new() -> Result<Self, FusError> {
-        Self::with_options(&Default::default())
     }
 
     /// Get the latest available firmware version for a given model number and
@@ -376,7 +376,7 @@ impl FusClient {
     /// with the next request.
     fn check_fus_response(&mut self, response: &Response) -> Result<(), FusError> {
         self.nonce = response.headers().get("NONCE")
-            .and_then(|x| Nonce::from_encrypted(x.as_bytes()).ok());
+            .and_then(|x| Nonce::from_encrypted(&self.keys, x.as_bytes()).ok());
 
         response.error_for_status_ref()?;
         Ok(())
@@ -408,9 +408,9 @@ impl FusClient {
     ) -> Result<Response, FusError> {
         let nonce = self.ensure_nonce().await?;
 
-        let mut auth = nonce.to_authorization();
+        let mut auth = nonce.to_authorization(&self.keys);
         if auth_include_nonce {
-            auth.nonce = nonce.to_encrypted();
+            auth.nonce = nonce.to_encrypted(&self.keys);
         }
 
         let r = request
@@ -664,6 +664,11 @@ mod tests {
 
     #[test]
     fn test_nonce() {
+        let keys = FusKeys::new(
+            b"testing_testing_testing_testing_",
+            b"testing_testing_",
+        ).unwrap();
+
         assert_matches!(Nonce::from_slice(b"testing_testing_"), Ok(_));
         assert_matches!(Nonce::from_slice(b"testing_testing"),
                         Err(FusError::NonceInvalidSize));
@@ -675,17 +680,22 @@ mod tests {
         assert_eq!(Nonce::from_slice(b"\xffesting_testing_").unwrap().to_string(),
                    "[Non-UTF-8 data]");
 
-        assert_eq!(Nonce::from_slice(b"testing_testing_").unwrap().to_encrypted(),
-                   "/xWmHWxXPyDNksBJQlBFqYG4Y3701Wt5RfO5/8X7Ud0=");
+        assert_eq!(Nonce::from_slice(b"testing_testing_").unwrap().to_encrypted(&keys),
+                   "yrJiFOygpIxnq4nbWdT2NLk1Odu8m5+zcFKQL4PzV0A=");
 
-        assert_matches!(Nonce::from_encrypted(b"/xWmHWxXPyDNksBJQlBFqYG4Y3701Wt5RfO5/8X7Ud0="),
+        assert_matches!(Nonce::from_encrypted(&keys, b"yrJiFOygpIxnq4nbWdT2NLk1Odu8m5+zcFKQL4PzV0A="),
                         Ok(x) if x == Nonce::from_slice(b"testing_testing_").unwrap());
     }
 
     #[test]
     fn test_nonce_signature() {
-        assert_eq!(Nonce::from_slice(b"testing_testing_").unwrap().to_signature(),
-                   "QM+qpkSluxiLgpRlTS0bU9mUGiB5xB3SDV7jz1itWww=");
+        let keys = FusKeys::new(
+            b"testing_testing_testing_testing_",
+            b"testing_testing_",
+        ).unwrap();
+
+        assert_eq!(Nonce::from_slice(b"testing_testing_").unwrap().to_signature(&keys),
+                   "9J2R5S8AAXs40SYA92cLHQfWDv/6w5cAeZkPOEDIFGw=");
     }
 
     #[test]

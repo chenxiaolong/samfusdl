@@ -26,7 +26,7 @@ use tokio::{
 
 use progresslib::{ProgressBar, ProgressDrawMode};
 use samfuslib::crypto::FusFileAes128;
-use samfuslib::fus::{FirmwareInfo, FusClient};
+use samfuslib::fus::{FirmwareInfo, FusClientBuilder};
 use samfuslib::range::split_range;
 use samfuslib::version::FwVersion;
 
@@ -93,6 +93,7 @@ struct ProgressMessage {
 /// downloaded (eg. premature EOF is an error).
 async fn download_range(
     task_id: TaskId,
+    client_builder: FusClientBuilder,
     mut file: File,
     info: Arc<FirmwareInfo>,
     initial_range: Range<u64>,
@@ -100,7 +101,7 @@ async fn download_range(
 ) -> Result<()> {
     debug!("[{}] Starting download with initial range: {:?}", task_id, initial_range);
 
-    let mut client = FusClient::new()
+    let mut client = client_builder.build()
         .context("Could not initialize FUS client")?;
     let mut stream = client.download(&info, initial_range.clone()).await
         .context("Could not start download")?;
@@ -155,12 +156,13 @@ async fn download_range(
 /// returns a tuple containing the task ID and the result.
 async fn download_task(
     task_id: TaskId,
+    client_builder: FusClientBuilder,
     file: File,
     info: Arc<FirmwareInfo>,
     initial_range: Range<u64>,
     channel: mpsc::Sender<ProgressMessage>,
 ) -> (TaskId, Result<()>) {
-    (task_id, download_range(task_id, file, info, initial_range, channel).await)
+    (task_id, download_range(task_id, client_builder, file, info, initial_range, channel).await)
 }
 
 /// Download a set of file chunks in parallel. Expected or recoverable errors
@@ -170,6 +172,7 @@ async fn download_task(
 /// be non-empty if the number of recoverable errors exceed the maximum
 /// attempts.
 async fn download_chunks(
+    client_builder: FusClientBuilder,
     file: File,
     info: Arc<FirmwareInfo>,
     chunks: &[Range<u64>],
@@ -193,6 +196,7 @@ async fn download_chunks(
     for (i, task_range) in task_ranges.iter().enumerate() {
         tasks.push(tokio::spawn(download_task(
             TaskId(i),
+            client_builder.clone(),
             file.try_clone().context("Could not duplicate file handle")?,
             info.clone(),
             task_range.clone(),
@@ -277,6 +281,7 @@ async fn download_chunks(
 
                         tasks.push(tokio::spawn(download_task(
                             task_id,
+                            client_builder.clone(),
                             file.try_clone().context("Could not duplicate file handle")?,
                             info.clone(),
                             new_range,
@@ -299,6 +304,7 @@ async fn download_chunks(
 
                         tasks.push(tokio::spawn(download_task(
                             task_id,
+                            client_builder.clone(),
                             file.try_clone().context("Could not duplicate file handle")?,
                             info.clone(),
                             task_ranges[task_id.0].clone(),
@@ -319,12 +325,13 @@ async fn download_chunks(
 /// Query FUS for information about the specified firmware. If no version is
 /// provided, the latest available version will be used.
 async fn get_firmware_info(
+    client_builder: FusClientBuilder,
     model: &str,
     region: &str,
     version: Option<FwVersion>,
 ) -> Result<FirmwareInfo> {
-    let mut client = FusClient::new()?;
-
+    let mut client = client_builder.build()
+        .context("Could not initialize FUS client")?;
     let fw_version = match version {
         Some(v) => v,
         None => client.get_latest_version(model, region).await?,
@@ -553,6 +560,12 @@ struct Opts {
     /// and decryption succeed.
     #[clap(long)]
     keep_encrypted: bool,
+    /// Ignore TLS validation for HTTPS connections
+    ///
+    /// By default, all HTTPS connections (eg. to FUS) will validate the TLS
+    /// certificate against the system's CA trust store.
+    #[clap(long)]
+    ignore_tls_validation: bool,
 }
 
 #[tokio::main]
@@ -567,10 +580,13 @@ async fn main() -> Result<()> {
 
     debug!("Arguments: {:#?}", opts);
 
+    let client_builder = FusClientBuilder::new()
+        .ignore_tls_validation(opts.ignore_tls_validation);
+
     debug!("Querying FUS for firmware information");
 
     let info = Arc::new(get_firmware_info(
-        &opts.model, &opts.region, opts.version).await
+        client_builder.clone(), &opts.model, &opts.region, opts.version).await
             .context("Failed to query firmware information")?);
 
     debug!("Full firmware info: {:#?}", info);
@@ -642,6 +658,7 @@ async fn main() -> Result<()> {
         debug!("Download ranges: {:#?}", chunks);
 
         let remaining_chunks = download_chunks(
+            client_builder.clone(),
             file.try_clone().context("Could not duplicate file handle")?,
             info.clone(),
             &chunks,

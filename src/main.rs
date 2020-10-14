@@ -25,10 +25,12 @@ use tokio::{
 };
 
 use progresslib::{ProgressBar, ProgressDrawMode};
-use samfuslib::crypto::FusFileAes128;
-use samfuslib::fus::{FirmwareInfo, FusClientBuilder};
-use samfuslib::range::split_range;
-use samfuslib::version::FwVersion;
+use samfuslib::{
+    crypto::{FusFileAes128, FusKeys},
+    fus::{FirmwareInfo, FusClientBuilder},
+    range::split_range,
+    version::FwVersion,
+};
 
 use file::{rename_atomic, write_all_at};
 
@@ -459,6 +461,25 @@ fn add_extension(path: &Path, ext: &str) -> PathBuf {
     PathBuf::from(s)
 }
 
+/// Load FUS keys from the following list in order:
+/// * User-supplied command line arguments
+/// * Environment variables
+/// * Config file
+fn load_keys(opts: &Opts, config: &Option<Config>) -> Result<FusKeys> {
+    let fixed_key = opts.fus_fixed_key
+        .as_ref()
+        .or(config.as_ref().and_then(|c| c.fus_fixed_key.as_ref()))
+        .ok_or(anyhow!("No FUS fixed key argument or variable specified"))?
+        .as_bytes();
+    let flexible_key_suffix = opts.fus_flexible_key_suffix
+        .as_ref()
+        .or(config.as_ref().and_then(|c| c.fus_flexible_key_suffix.as_ref()))
+        .ok_or(anyhow!("No FUS flexible key suffix argument or variable specified"))?
+        .as_bytes();
+
+    Ok(FusKeys::new(fixed_key, flexible_key_suffix)?)
+}
+
 #[derive(Clap, Clone, Copy, Debug)]
 enum LogLevel {
     Debug,
@@ -490,6 +511,45 @@ impl FromStr for NumChunks {
         }
 
         Ok(Self(n))
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Config {
+    fus_fixed_key: Option<String>,
+    fus_flexible_key_suffix: Option<String>,
+}
+
+fn default_config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|mut p| {
+        p.push(format!("{}.conf", PKG_NAME));
+        p
+    })
+}
+
+fn load_config_file(user_path: Option<&Path>) -> Result<Option<Config>> {
+    let default_path = default_config_path();
+    let path = user_path.or(default_path.as_ref().map(|p| p.as_path()));
+
+    match path {
+        Some(p) => {
+            let file = match File::open(p) {
+                Ok(f) => f,
+                Err(e) => {
+                    return if e.kind() == io::ErrorKind::NotFound {
+                        Ok(None)
+                    } else {
+                        Err(e).context(format!("Could not open file: {:?}", p))
+                    };
+                }
+            };
+
+            let config = serde_json::from_reader(file)
+                .context(format!("Could not parse config file: {:?}", p))?;
+
+            Ok(Some(config))
+        }
+        None => Ok(None),
     }
 }
 
@@ -566,6 +626,26 @@ struct Opts {
     /// certificate against the system's CA trust store.
     #[clap(long)]
     ignore_tls_validation: bool,
+    /// FUS fixed key
+    ///
+    /// If unspecified, the key is loaded from the `FUS_FIXED_KEY` environment
+    /// variable, followed by the `fus_fixed_key` config file variable.
+    #[clap(long, env = "FUS_FIXED_KEY")]
+    fus_fixed_key: Option<String>,
+    /// FUS flexible key suffix
+    ///
+    /// If unspecified, the key is loaded from the `FUS_FLEXIBLE_KEY_SUFFIX`
+    /// environment variable, followed by the `fux_flexible_key_suffix` config
+    /// file variable.
+    #[clap(long, env = "FUS_FLEXIBLE_KEY_SUFFIX")]
+    fus_flexible_key_suffix: Option<String>,
+    /// Config file path
+    ///
+    /// If unspecified, the default config file path is used. The config file
+    /// can store the FUS keys to avoid needing to set environment variables or
+    /// pass them as command-line arguments.
+    #[clap(long, parse(from_os_str))]
+    config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -580,7 +660,13 @@ async fn main() -> Result<()> {
 
     debug!("Arguments: {:#?}", opts);
 
-    let client_builder = FusClientBuilder::new()
+    let config = load_config_file(opts.config.as_ref().map(|p| p.as_path()))?;
+    debug!("Config: {:#?}", config);
+
+    let keys = load_keys(&opts, &config)?;
+    debug!("Keys: {:?}", keys);
+
+    let client_builder = FusClientBuilder::new(keys)
         .ignore_tls_validation(opts.ignore_tls_validation);
 
     debug!("Querying FUS for firmware information");

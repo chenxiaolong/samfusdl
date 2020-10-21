@@ -301,7 +301,7 @@ async fn download_chunks(
                             continue;
                         }
 
-                        eprintln!("Retrying (attempt {}/{}) ...", error_count, max_errors);
+                        bar.println(format!("Retrying (attempt {}/{}) ...", error_count, max_errors))?;
                         debug!("[{}] Retrying incomplete range {:?}", task_id, task_ranges[task_id.0]);
 
                         tasks.push(tokio::spawn(download_task(

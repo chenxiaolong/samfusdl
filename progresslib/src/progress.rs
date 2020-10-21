@@ -298,7 +298,7 @@ impl<T: Write + IsTty> ProgressBar<T> {
         );
 
         if self.mode == ProgressDrawMode::Interactive {
-            let term_width = terminal::size()?.0 as usize;
+            let term_width = terminal::size().unwrap_or((80, 24)).0 as usize;
             // result.len() includes the placeholder (+1), which works because
             // there is a space after the bar.
             let bar_width = term_width.saturating_sub(result.len());

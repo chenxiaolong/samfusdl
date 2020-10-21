@@ -292,7 +292,7 @@ async fn download_chunks(
                     }
 
                     // Task failed
-                    Some(Ok((task_id, e @ Err(_)))) => {
+                    Some(Ok((task_id, Err(e)))) => {
                         bar.println(format!("{:?}", e.context("Error encountered during download")))?;
                         error_count += 1;
 
@@ -301,7 +301,7 @@ async fn download_chunks(
                             continue;
                         }
 
-                        eprintln!("Retrying (attempt {}/{}) ...", error_count, max_errors);
+                        bar.println(format!("Retrying (attempt {}/{}) ...", error_count, max_errors))?;
                         debug!("[{}] Retrying incomplete range {:?}", task_id, task_ranges[task_id.0]);
 
                         tasks.push(tokio::spawn(download_task(

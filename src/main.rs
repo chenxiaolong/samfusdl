@@ -1,4 +1,5 @@
 mod file;
+mod state;
 
 use std::{
     cmp,
@@ -9,6 +10,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -33,42 +35,17 @@ use samfuslib::{
 };
 
 use file::{rename_atomic, write_all_at};
+use state::{MAX_RANGES, StateFile};
 
 const PKG_NAME: &str = env!("CARGO_PKG_NAME");
-const STATE_EXT: &str = concat!(env!("CARGO_PKG_NAME"), "_state");
+const DOWNLOAD_EXT: &str = concat!(env!("CARGO_PKG_NAME"), "_download");
 const TEMP_EXT: &str = concat!(env!("CARGO_PKG_NAME"), "_temp");
 
-// Minimum download chunk size per thread
+/// Minimum download chunk size per thread
 const MIN_CHUNK_SIZE: u64 = 1 * 1024 * 1024;
 
-#[derive(Debug, Deserialize, Serialize)]
-struct DownloadState {
-    remaining: Vec<(u64, u64)>,
-}
-
-impl DownloadState {
-    fn from_ranges(ranges: &[Range<u64>]) -> Self {
-        Self {
-            remaining: ranges.iter().map(|r| (r.start, r.end)).collect()
-        }
-    }
-
-    fn to_ranges(&self) -> Vec<Range<u64>> {
-        self.remaining.iter().map(|&(start, end)| start..end).collect()
-    }
-
-    fn read_file(path: &Path) -> Result<Self> {
-        let f = File::open(path)?;
-        let data = serde_json::from_reader(f)?;
-        Ok(data)
-    }
-
-    fn write_file(&self, path: &Path) -> Result<()> {
-        let f = File::create(path)?;
-        serde_json::to_writer(f, self)?;
-        Ok(())
-    }
-}
+/// Interval for writing state block
+const STATE_WRITE_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug)]
 struct TaskId(usize);
@@ -170,29 +147,32 @@ async fn download_task(
 /// Download a set of file chunks in parallel. Expected or recoverable errors
 /// are printed to stderr. Unrecoverable errors are returned as an Err. Download
 /// progress is reported via the specified progress bar. Unless an unrecoverable
-/// error occurs, the list of incomplete download ranges is returned. This will
-/// be non-empty if the number of recoverable errors exceed the maximum
-/// attempts.
+/// error occurs, the return value indicates whether the download completed
+/// successfully. If `false` is returned, the user interrupted the download or
+/// the number of recoverable errors exceeded the maximum attempts.
 async fn download_chunks(
     client_builder: FusClientBuilder,
-    file: File,
+    mut file: File,
+    mut state_file: StateFile,
     info: Arc<FirmwareInfo>,
     chunks: &[Range<u64>],
     max_errors: u8,
-) -> Result<Vec<Range<u64>>> {
+) -> Result<bool> {
     let mut bar = create_progress_bar(info.size);
     let remaining: u64 = chunks.iter()
         .map(|r| r.end - r.start)
         .sum();
     bar.set_position(info.size - remaining)?;
 
-    file.set_len(info.size)
-        .context(format!("Could not set size of output file"))?;
-
     let mut task_ranges: Vec<_> = chunks.iter().cloned().collect();
     let mut tasks = FuturesUnordered::new();
+    let mut last_state_write = Instant::now();
     let mut error_count = 0u8;
     let (tx, mut rx) = mpsc::channel(task_ranges.len());
+
+    // Write initial state
+    state_file.write_state(&task_ranges)
+        .context("Could not write download state")?;
 
     // Start downloading evenly split chunks.
     for (i, task_range) in task_ranges.iter().enumerate() {
@@ -229,6 +209,20 @@ async fn download_chunks(
                 task_range.start += p.bytes;
 
                 p.resp.send(task_range.end).unwrap();
+
+                // Write the current state.
+                if last_state_write.elapsed() > STATE_WRITE_INTERVAL {
+                    task::block_in_place(|| -> Result<()> {
+                        file.flush().context("Could not flush writes")?;
+
+                        state_file.write_state(&task_ranges)
+                            .context("Could not write download state")?;
+
+                        Ok(())
+                    })?;
+
+                    last_state_write = Instant::now();
+                }
             }
 
             // Received completion message.
@@ -318,10 +312,14 @@ async fn download_chunks(
         }
     }
 
-    let incomplete = task_ranges.into_iter()
+    // Write final state
+    let incomplete: Vec<_> = task_ranges.into_iter()
         .filter(|r| r.end - r.start > 0)
         .collect();
-    Ok(incomplete)
+    state_file.write_state(&incomplete)
+        .context("Could not write download state")?;
+
+    Ok(incomplete.is_empty())
 }
 
 /// Query FUS for information about the specified firmware. If no version is
@@ -425,19 +423,24 @@ fn create_progress_bar(len: u64) -> ProgressBar<Stderr> {
     bar
 }
 
-/// Open a file, creating it if it doesn't already exist. Returns the file
-/// handle and whether the file existed.
-fn open_or_create(options: &OpenOptions, path: &Path) -> Result<(File, bool)> {
-    match options.open(path) {
+/// Open an existing file or create a new file at another path. Useful when an
+/// existing file should be opened and eg. a new temp file should be created if
+/// if doesn't exist. Returns the file handle and whether `open_path` existed.
+fn open_or_create(
+    options: &OpenOptions,
+    open_path: &Path,
+    create_path: &Path,
+) -> Result<(File, bool)> {
+    match options.open(open_path) {
         Ok(f) => Ok((f, true)),
         Err(e) => {
-            let r = if e.kind() != io::ErrorKind::NotFound {
-                Err(e)
+            let (r, p) = if e.kind() == io::ErrorKind::NotFound {
+                (options.clone().create(true).open(create_path), create_path)
             } else {
-                options.clone().create(true).open(path)
+                (Err(e), open_path)
             };
 
-            Ok((r.context(format!("Could not open file: {:?}", path))?, false))
+            Ok((r.context(format!("Could not open file: {:?}", p))?, false))
         }
     }
 }
@@ -505,7 +508,7 @@ impl FromStr for NumChunks {
         let n: u64 = s.parse()?;
         if n == 0 {
             return Err(anyhow!("value cannot be 0"));
-        } else if n > 16 {
+        } else if n > MAX_RANGES as u64 {
             // Same limit as aria2 to avoid unintentional DoS
             return Err(anyhow!("too many chunks"));
         }
@@ -689,82 +692,81 @@ async fn main() -> Result<()> {
 
     let (default_filename, ext) = info.split_filename();
     let output_path = opts.output.unwrap_or(Path::new(&default_filename).to_owned());
-    let temp_path = add_extension(&output_path, TEMP_EXT);
+    let output_path_temp = add_extension(&output_path, TEMP_EXT);
     let download_path = add_extension(&output_path, &ext);
-    let state_path = add_extension(&download_path, STATE_EXT);
+    let download_path_temp = add_extension(&download_path, DOWNLOAD_EXT);
 
-    debug!("Output path: {:?}", output_path);
-    debug!("Temp path: {:?}", temp_path);
-    debug!("Download path: {:?}", download_path);
-    debug!("Download state path: {:?}", state_path);
+    debug!("Output path (final): {:?}", output_path);
+    debug!("Output path (temp): {:?}", output_path_temp);
+    debug!("Download path (final): {:?}", download_path);
+    debug!("Download path (temp): {:?}", download_path_temp);
 
     if output_path.exists() && !opts.force {
         eprintln!("{:?} already exists. Use -f/--force to overwrite.", output_path);
         return Ok(());
     }
 
-    // Try to open the state file or split into evenly sized chunks
-    let (chunks, resuming) = match DownloadState::read_file(&state_path) {
-        Ok(mut s) => {
-            debug!("Validating state file data: {:?}", s);
+    let (file, completed_download) = open_or_create(
+        OpenOptions::new().read(true).write(true),
+        &download_path,
+        &download_path_temp,
+    )?;
 
-            s.remaining.sort();
+    if !completed_download {
+        let mut state_file = StateFile::new(
+            file.try_clone().context("Could not duplicate file handle")?,
+            info.size,
+        ).context("Could not load download state")?;
 
-            if !s.remaining.windows(2).all(|w| {
-                w[0].0 <= w[0].1 && w[0].1 <= w[1].0 && w[1].0 <= w[1].1 && w[1].1 <= info.size
-            }) {
-                debug!("Download ranges overlap or are not increasing");
+        // Try to read the existing state or split into evenly sized chunks
+        let chunks = if state_file.is_valid() {
+            debug!("Have existing state data");
+            debug!("Command-line chunks option ({}) will be ignored", opts.chunks.0);
 
-                return Err(anyhow!(
-                    "State file is corrupted. Delete to download from scratch: {:?}",
-                    state_path,
-                ));
-            }
-
-            (s.to_ranges(), true)
-        }
-        Err(e) => {
-            match e.downcast_ref::<io::Error>() {
-                Some(e) if e.kind() == io::ErrorKind::NotFound => {
-                    debug!("No existing state file found");
-
-                    (split_range(0..info.size, opts.chunks.0, Some(MIN_CHUNK_SIZE)), false)
+            match state_file.read_state() {
+                Ok(c) => c,
+                Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+                    return Err(anyhow!(
+                        "Download file is corrupted. Delete to download from scratch: {:?}",
+                        download_path_temp,
+                    ));
                 }
-                _ => return Err(e).context(format!(
-                    "Error when opening state file: {:?}", state_path)),
+                Err(e) => return Err(e).context("Could not load download state"),
             }
-        }
-    };
+        } else {
+            debug!("No existing state available");
 
-    // Try to open existing download
-    let (file, existed) = open_or_create(
-        OpenOptions::new().read(true).write(true), &download_path)?;
+            split_range(
+                0..info.size,
+                opts.chunks.0,
+                Some(MIN_CHUNK_SIZE),
+            )
+        };
 
-    if resuming || !existed {
         debug!("Download ranges: {:#?}", chunks);
 
-        let remaining_chunks = download_chunks(
+        let complete = download_chunks(
             client_builder.clone(),
             file.try_clone().context("Could not duplicate file handle")?,
+            state_file,
             info.clone(),
             &chunks,
             opts.retries,
         ).await?;
 
-        if !remaining_chunks.is_empty() {
-            task::spawn_blocking(move || -> Result<()> {
-                DownloadState::from_ranges(&remaining_chunks)
-                    .write_file(&state_path)
-            }).await??;
-
+        if !complete {
             return Err(anyhow!("Download was interrupted. To resume, rerun the current command."));
         }
 
-        delete_if_exists(&state_path)?;
+        rename_atomic(&download_path_temp, &download_path)
+            .context(format!("Could not move {:?} to {:?}", download_path_temp, download_path))?;
     }
 
-    let decrypted_file = File::create(&temp_path)
-        .context(format!("Could not open file: {:?}", temp_path))?;
+    debug!("Truncating to {} bytes to strip state block", info.size);
+    file.set_len(info.size).context("Could not set file size")?;
+
+    let decrypted_file = File::create(&output_path_temp)
+        .context(format!("Could not open file: {:?}", output_path_temp))?;
 
     debug!("Decrypting firmware and validating CRC32");
 
@@ -774,8 +776,8 @@ async fn main() -> Result<()> {
         delete_if_exists(&download_path)?;
     }
 
-    rename_atomic(&temp_path, &output_path)
-        .context(format!("Could not move {:?} to {:?}", temp_path, output_path))?;
+    rename_atomic(&output_path_temp, &output_path)
+        .context(format!("Could not move {:?} to {:?}", output_path_temp, output_path))?;
 
     Ok(())
 }

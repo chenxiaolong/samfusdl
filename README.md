@@ -113,7 +113,5 @@ samfusdl is licensed under the GPLv3 license. For details, please see [`LICENSE`
 
 ## TODO
 
-* Add periodic fsync and state file writes so that downloads are still resumable after an unclean interrupt.
 * Add command line argument for picking home vs. factory firmware.
 * Stop using FOTA for querying the latest firmware as it does not work for `ATT` or `VZW`.
-* Create CI pipeline.

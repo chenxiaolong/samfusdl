@@ -28,13 +28,18 @@ jobs:
           RUSTC_BOOTSTRAP=1 rustc -Z unstable-options --print target-spec-json \
               | jq -r '."llvm-target"'
 
+      - name: Install clippy
+        run: rustup component add clippy
+
       - name: Run tests in debug mode
         env:
           RUST_BACKTRACE: 1
           # ENABLE_VIRTUAL_TERMINAL_PROCESSING does not work in GitHub Actions,
           # so set TERM to force crossterm to output ANSI sequences.
           TERM: xterm
-        run: cargo test --workspace
+        run: |
+          cargo clippy --workspace -- -D warnings
+          cargo test --workspace
 
       - name: Build in debug mode
         run: cargo build --verbose

@@ -58,8 +58,8 @@ impl FromStr for FwVersion {
         Ok(Self::new(
             pieces[0],
             pieces[1],
-            pieces.get(2).map(|x| *x),
-            pieces.get(3).map(|x| *x)
+            pieces.get(2).copied(),
+            pieces.get(3).copied(),
         ))
     }
 }

@@ -439,7 +439,7 @@ impl FusClient {
 
         // HTTP 200, but there might still be a FUS error
         let status = Self::get_elem_text(&root, &["FUSBody", "Results", "Status"])
-            .ok_or(FusError::FusBadResponse("Missing FUS status field".to_owned()))?;
+            .ok_or_else(|| FusError::FusBadResponse("Missing FUS status field".to_owned()))?;
 
         if status != "200" {
             return Err(FusError::FusBadResponse(status.to_string()));
@@ -486,7 +486,7 @@ impl FusClient {
         let binary_name = get_string!(&resp_root, "BINARY_NAME");
         let filename = Path::new(&binary_name)
             .file_name()
-            .ok_or(FusError::FusBadField("BINARY_NAME".to_owned(), binary_name.clone()))?
+            .ok_or_else(|| FusError::FusBadField("BINARY_NAME".to_owned(), binary_name.clone()))?
             .to_str()
             .unwrap() // Cannot panic
             .to_owned();
@@ -646,7 +646,7 @@ impl FusClient {
     }
 
     fn get_fus_field<'a>(elem: &'a Element, field: &str) -> Option<Cow<'a, str>> {
-        Self::get_elem_text(elem, &vec!["FUSBody", "Put", field, "Data"])
+        Self::get_elem_text(elem, &["FUSBody", "Put", field, "Data"])
     }
 }
 

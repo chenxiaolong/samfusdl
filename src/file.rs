@@ -36,7 +36,7 @@ pub fn read_all_at(file: &mut File, mut buf: &mut [u8], mut offset: u64) -> io::
         offset += n as u64;
     }
 
-    return Ok(())
+    Ok(())
 }
 
 /// Write data to offset. The file position *will* be changed.
@@ -69,7 +69,7 @@ pub fn write_all_at(file: &mut File, mut buf: &[u8], mut offset: u64) -> io::Res
         offset += n as u64;
     }
 
-    return Ok(())
+    Ok(())
 }
 
 /// Rename a file with POSIX semantics (atomic and overwrites destination if it

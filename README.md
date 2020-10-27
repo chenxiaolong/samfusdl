@@ -75,9 +75,9 @@ samfusdl -m SM-N986U -r TMB -v N986USQU1ATGM/N986UOYN1ATGM
 
 To change the output path, use the `-o <filename>` argument.
 
-By default, firmware files are downloaded with 4 parallel connections. This can be changed using the `-c`/`--chunks` argument.
+Firmware files are downloaded with 4 parallel connections. This can be changed using the `-c`/`--chunks` argument. To interrupt a download, simply use Ctrl-C as usual. Rerunning the same command will resume the download.
 
-To interrupt a download, simply use Ctrl-C as usual. Rerunning the same command will resume the download.
+By default, the "home" firmware type (also known as "binary nature") is downloaded instead of the "factory" image. For newer devices, both firmware types are the same. To specify which type of firmware to download, use the `-t`/`--firmware-type` argument.
 
 For more information about other command-line arguments, see `--help`.
 
@@ -113,5 +113,4 @@ samfusdl is licensed under the GPLv3 license. For details, please see [`LICENSE`
 
 ## TODO
 
-* Add command line argument for picking home vs. factory firmware.
 * Stop using FOTA for querying the latest firmware as it does not work for `ATT` or `VZW`.

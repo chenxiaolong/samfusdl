@@ -330,6 +330,7 @@ async fn get_firmware_info(
     model: &str,
     region: &str,
     version: Option<FwVersion>,
+    factory: bool,
 ) -> Result<FirmwareInfo> {
     let mut client = client_builder.build()
         .context("Could not initialize FUS client")?;
@@ -337,7 +338,7 @@ async fn get_firmware_info(
         Some(v) => v,
         None => client.get_latest_version(model, region).await?,
     };
-    let info = client.get_firmware_info(model, region, &fw_version).await?;
+    let info = client.get_firmware_info(model, region, &fw_version, factory).await?;
 
     Ok(info)
 }
@@ -484,6 +485,27 @@ fn load_keys(opts: &Opts, config: &Option<Config>) -> Result<FusKeys> {
     Ok(FusKeys::new(fixed_key, flexible_key_suffix)?)
 }
 
+#[derive(Clap, Clone, Copy, Debug, Eq, PartialEq)]
+enum FirmwareType {
+    Home,
+    Factory,
+}
+
+impl Default for FirmwareType {
+    fn default() -> Self {
+        Self::Home
+    }
+}
+
+impl fmt::Display for FirmwareType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Home => f.write_str("home"),
+            Self::Factory => f.write_str("factory"),
+        }
+    }
+}
+
 #[derive(Clap, Clone, Copy, Debug)]
 enum LogLevel {
     Debug,
@@ -575,6 +597,12 @@ struct Opts {
     /// the latest available version is queried from the FOTA server.
     #[clap(short, long)]
     version: Option<FwVersion>,
+    /// Firmware type to download (home or factory)
+    ///
+    /// This option allows the firmware type (also known as "binary nature") to
+    /// be selected. By default, the "home" firmware is downloaded.
+    #[clap(arg_enum, short = 't', default_value)]
+    firmware_type: FirmwareType,
     /// Output path for decrypted firmware
     ///
     /// By default, the output path is the filename returned by the server. This
@@ -685,8 +713,12 @@ async fn main() -> Result<()> {
     debug!("Querying FUS for firmware information");
 
     let info = Arc::new(get_firmware_info(
-        client_builder.clone(), &opts.model, &opts.region, opts.version).await
-            .context("Failed to query firmware information")?);
+        client_builder.clone(),
+        &opts.model,
+        &opts.region,
+        opts.version,
+        opts.firmware_type == FirmwareType::Factory,
+    ).await.context("Failed to query firmware information")?);
 
     debug!("Full firmware info: {:#?}", info);
 
@@ -695,6 +727,7 @@ async fn main() -> Result<()> {
     println!("- Region: {}", info.region);
     println!("- Version: {}", info.version);
     println!("- OS: {} {}", info.platform, info.version_name);
+    println!("- Type: {}", if info.binary_nature { "Factory" } else { "Home" });
     println!("- File: {}{}", info.path, info.filename);
     println!("- Size: {} bytes", info.size);
     println!("- CRC32: {:08X}", info.crc);

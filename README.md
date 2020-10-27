@@ -95,7 +95,7 @@ The resulting executable will be in `target/release/samfusdl` or `target\release
 
 ## Debugging
 
-Debug logging can be enabled with the `--loglevel debug` argument. This will disable the fancy progress bar and print out significantly more information, such as how the parallel download chunks are split.
+Debug logging can be enabled with the `--loglevel debug` argument. This will disable the fancy progress bar and print out significantly more information, such as how the parallel download chunks are split. Note that encryption keys are not logged unless the `SAMFUSDL_LOG_KEYS` environment variable is set to `true`.
 
 If `--loglevel trace` is set, each file I/O operation during the download stage is logged. This is generally not useful for anything besides debugging the parallel download mechanism or `pwrite`/overlapped-I/O.
 

@@ -3,6 +3,7 @@ mod state;
 
 use std::{
     cmp,
+    env,
     fmt,
     fs::{self, File, OpenOptions},
     io::{self, stderr, Read, Seek, SeekFrom, Stderr, Write},
@@ -660,14 +661,23 @@ async fn main() -> Result<()> {
     }
 
     env_logger::init();
+    let log_keys_var = format!("{}_LOG_KEYS", PKG_NAME.to_uppercase());
+    let log_keys = match env::var(log_keys_var) {
+        Ok(v) if v == "true" => true,
+        _ => false,
+    };
 
     debug!("Arguments: {:#?}", opts);
 
     let config = load_config_file(opts.config.as_ref().map(|p| p.as_path()))?;
-    debug!("Config: {:#?}", config);
+    if log_keys {
+        debug!("Config: {:#?}", config);
+    }
 
     let keys = load_keys(&opts, &config)?;
-    debug!("Keys: {:?}", keys);
+    if log_keys {
+        debug!("Keys: {:?}", keys);
+    }
 
     let client_builder = FusClientBuilder::new(keys)
         .ignore_tls_validation(opts.ignore_tls_validation);

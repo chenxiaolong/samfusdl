@@ -404,7 +404,7 @@ impl FusClient {
     async fn execute_fus_request(
         &mut self,
         request: RequestBuilder,
-        auth_include_nonce: bool
+        auth_include_nonce: bool,
     ) -> Result<Response, FusError> {
         let nonce = self.ensure_nonce().await?;
 
@@ -428,7 +428,7 @@ impl FusClient {
         &mut self,
         url: &str,
         body: &Element,
-        auth_include_nonce: bool
+        auth_include_nonce: bool,
     ) -> Result<Element, FusError> {
         let mut buf = vec![];
         body.write(&mut buf)?;
@@ -453,10 +453,11 @@ impl FusClient {
         &mut self,
         model: &str,
         region: &str,
-        version: &FwVersion
+        version: &FwVersion,
+        factory: bool,
     ) -> Result<FirmwareInfo, FusError> {
         let nonce = self.ensure_nonce().await?;
-        let req_root = Self::create_binary_inform_elem(model, region, version, nonce);
+        let req_root = Self::create_binary_inform_elem(model, region, version, nonce, factory);
 
         let url = format!("{}/NF_DownloadBinaryInform.do", FUS_BASE_URL);
         let resp_root = self.execute_fus_xml_request(&url, &req_root, false).await?;
@@ -566,7 +567,8 @@ impl FusClient {
         model: &str,
         region: &str,
         version: &FwVersion,
-        nonce: Nonce
+        nonce: Nonce,
+        binary_nature: bool,
     ) -> Element {
         use LogicCheckType::Data;
 
@@ -575,7 +577,8 @@ impl FusClient {
         let mut put = Element::new("Put");
         put.children.push(Self::create_text_node("CmdID", "1"));
         put.children.push(Self::create_data_node("ACCESS_MODE", "2"));
-        put.children.push(Self::create_data_node("BINARY_NATURE", "0"));
+        put.children.push(Self::create_data_node("BINARY_NATURE",
+            if binary_nature { "1" } else { "0" }));
         put.children.push(Self::create_data_node("CLIENT_PRODUCT", "Smart Switch"));
         put.children.push(Self::create_data_node("DEVICE_MODEL_NAME", model));
         put.children.push(Self::create_data_node("DEVICE_LOCAL_CODE", region));

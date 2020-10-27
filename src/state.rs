@@ -145,16 +145,18 @@ impl StateFile {
         result.sort_by_key(|r| r.start);
         result.retain(|r| r.end - r.start > 0);
 
-        if !result.windows(2).all(|w| {
+        let is_increasing = |w: &[Range<u64>]| {
             w[0].start <= w[0].end
             && w[0].end <= w[1].start
             && w[1].start <= w[1].end
             && w[1].end <= self.offset
-        }) {
+        };
+
+        if !result.windows(2).all(is_increasing) {
             debug!("Ranges overlap or are not increasing: {:?}", result);
 
             return Err(io::Error::new(io::ErrorKind::InvalidData,
-                format!("Ranges overlap or are not increasing")));
+                "Ranges overlap or are not increasing"));
         }
 
         Ok(result)

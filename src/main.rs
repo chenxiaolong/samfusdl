@@ -43,7 +43,7 @@ const DOWNLOAD_EXT: &str = concat!(env!("CARGO_PKG_NAME"), "_download");
 const TEMP_EXT: &str = concat!(env!("CARGO_PKG_NAME"), "_temp");
 
 /// Minimum download chunk size per thread
-const MIN_CHUNK_SIZE: u64 = 1 * 1024 * 1024;
+const MIN_CHUNK_SIZE: u64 = 1024 * 1024;
 
 /// Interval for writing state block
 const STATE_WRITE_INTERVAL: Duration = Duration::from_secs(5);
@@ -165,7 +165,7 @@ async fn download_chunks(
         .sum();
     bar.set_position(info.size - remaining)?;
 
-    let mut task_ranges: Vec<_> = chunks.iter().cloned().collect();
+    let mut task_ranges = chunks.to_vec();
     let mut tasks = FuturesUnordered::new();
     let mut last_state_write = Instant::now();
     let mut error_count = 0u8;
@@ -473,13 +473,13 @@ fn add_extension(path: &Path, ext: &str) -> PathBuf {
 fn load_keys(opts: &Opts, config: &Option<Config>) -> Result<FusKeys> {
     let fixed_key = opts.fus_fixed_key
         .as_ref()
-        .or(config.as_ref().and_then(|c| c.fus_fixed_key.as_ref()))
-        .ok_or(anyhow!("No FUS fixed key argument or variable specified"))?
+        .or_else(|| config.as_ref().and_then(|c| c.fus_fixed_key.as_ref()))
+        .ok_or_else(|| anyhow!("No FUS fixed key argument or variable specified"))?
         .as_bytes();
     let flexible_key_suffix = opts.fus_flexible_key_suffix
         .as_ref()
-        .or(config.as_ref().and_then(|c| c.fus_flexible_key_suffix.as_ref()))
-        .ok_or(anyhow!("No FUS flexible key suffix argument or variable specified"))?
+        .or_else(|| config.as_ref().and_then(|c| c.fus_flexible_key_suffix.as_ref()))
+        .ok_or_else(|| anyhow!("No FUS flexible key suffix argument or variable specified"))?
         .as_bytes();
 
     Ok(FusKeys::new(fixed_key, flexible_key_suffix)?)
@@ -555,7 +555,7 @@ fn default_config_path() -> Option<PathBuf> {
 
 fn load_config_file(user_path: Option<&Path>) -> Result<Option<Config>> {
     let default_path = default_config_path();
-    let path = user_path.or(default_path.as_ref().map(|p| p.as_path()));
+    let path = user_path.or_else(|| default_path.as_deref());
 
     match path {
         Some(p) => {
@@ -690,14 +690,11 @@ async fn main() -> Result<()> {
 
     env_logger::init();
     let log_keys_var = format!("{}_LOG_KEYS", PKG_NAME.to_uppercase());
-    let log_keys = match env::var(log_keys_var) {
-        Ok(v) if v == "true" => true,
-        _ => false,
-    };
+    let log_keys = matches!(env::var(log_keys_var), Ok(v) if v == "true");
 
     debug!("Arguments: {:#?}", opts);
 
-    let config = load_config_file(opts.config.as_ref().map(|p| p.as_path()))?;
+    let config = load_config_file(opts.config.as_deref())?;
     if log_keys {
         debug!("Config: {:#?}", config);
     }
@@ -734,7 +731,7 @@ async fn main() -> Result<()> {
     println!("- Date: {}", info.last_modified);
 
     let (default_filename, ext) = info.split_filename();
-    let output_path = opts.output.unwrap_or(Path::new(&default_filename).to_owned());
+    let output_path = opts.output.unwrap_or_else(|| Path::new(&default_filename).to_owned());
     let output_path_temp = add_extension(&output_path, TEMP_EXT);
     let download_path = add_extension(&output_path, &ext);
     let download_path_temp = add_extension(&download_path, DOWNLOAD_EXT);

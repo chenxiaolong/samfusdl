@@ -61,17 +61,7 @@ To download the latest firmware for a device, run:
 samfusdl -m <model> -r <region>
 ```
 
-For example:
-
-```
-samfusdl -m SM-N986U -r TMB
-```
-
-To download a specific firmware version, use the `-v`/`--version` argument. For example:
-
-```
-samfusdl -m SM-N986U -r TMB -v N986USQU1ATGM/N986UOYN1ATGM
-```
+To download a specific firmware version, add the `-v`/`--version` argument. The version string is in the form: `<PDA>/<CSC>/<Phone>/<Data>`. For most devices, the shorthand `<PDA>/<CSC>` can be used because `<Phone>` and `<Data>` have the same value as `<PDA>`.
 
 To change the output path, use the `-o <filename>` argument.
 

@@ -526,12 +526,17 @@ impl FusClient {
         let url = format!("{}/NF_DownloadBinaryInitForMass.do", FUS_BASE_URL);
         self.execute_fus_xml_request(&url, &req_root, false).await?;
 
-        // Download binary
-        let url = format!("{}/NF_DownloadBinaryForMass.do", DOWNLOAD_BASE_URL);
+        // Download binary. This intentionally does not use RequestBuilder.query() because FUS has
+        // been updated to return HTTP 405 if the requested filename is URL-encoded.
+        let url = format!(
+            "{}/NF_DownloadBinaryForMass.do?file={}{}",
+            DOWNLOAD_BASE_URL,
+            info.path,
+            info.filename,
+        );
         let r = self.execute_fus_request(
             self.client.get(&url)
-                .header(RANGE, format!("bytes={}-{}", range.start, range.end))
-                .query(&[("file", format!("{}{}", info.path, info.filename))]),
+                .header(RANGE, format!("bytes={}-{}", range.start, range.end)),
             true,
         ).await?;
         let status = r.status();

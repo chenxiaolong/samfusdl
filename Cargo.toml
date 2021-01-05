@@ -5,22 +5,23 @@ authors = ["Andrew Gunnerson <chillermillerlong@hotmail.com>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.32"
+anyhow = "1.0.37"
 clap = "3.0.0-beta.2"
-crc32fast = "1.2.0"
+crc32fast = "1.2.1"
 dirs = "3.0.1"
-env_logger = "0.7.1"
-futures = "0.3.5"
-futures-util = "0.3.5"
+env_logger = "0.8.2"
+futures = "0.3.8"
+futures-util = "0.3.8"
 log = "0.4.11"
 progresslib = { path = "progresslib" }
 samfuslib = { path = "samfuslib" }
-serde = { version = "1.0.116", features = ["derive"] }
-serde_json = "1.0.57"
-tokio = { version = "0.2.22", features = ["full"] }
+serde = { version = "1.0.118", features = ["derive"] }
+serde_json = "1.0.61"
+tokio = { version = "1.0.1", features = ["full"] }
+tokio-stream = "0.1.1"
 
 [target.'cfg(windows)'.dependencies]
-memoffset = "0.5.6"
+memoffset = "0.6.1"
 winapi = "0.3.9"
 
 [workspace]

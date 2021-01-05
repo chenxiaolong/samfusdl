@@ -3,9 +3,9 @@ use std::{
     convert::TryInto,
 };
 
-use block_cipher::generic_array::GenericArray;
 use block_modes::{BlockMode, Cbc, Ecb};
 use block_padding::{NoPadding, Padding, Pkcs7};
+use cipher::generic_array::GenericArray;
 use thiserror::Error;
 
 /// Block size for encrypted data

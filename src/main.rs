@@ -22,10 +22,10 @@ use log::{debug, Level, log_enabled, trace};
 use serde::{Deserialize, Serialize};
 use tokio::{
     signal::ctrl_c,
-    stream::StreamExt,
     sync::{mpsc, oneshot},
     task,
 };
+use tokio_stream::StreamExt;
 
 use progresslib::{ProgressBar, ProgressDrawMode};
 use samfuslib::{
@@ -77,7 +77,7 @@ async fn download_range(
     mut file: File,
     info: Arc<FirmwareInfo>,
     initial_range: Range<u64>,
-    mut channel: mpsc::Sender<ProgressMessage>,
+    channel: mpsc::Sender<ProgressMessage>,
 ) -> Result<()> {
     debug!("[{}] Starting download with initial range: {:?}", task_id, initial_range);
 

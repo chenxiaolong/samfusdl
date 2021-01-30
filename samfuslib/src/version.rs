@@ -55,11 +55,19 @@ impl FromStr for FwVersion {
             return Err(ParseFwVersionError::TooManyFields);
         }
 
+        fn none_if_empty(s: &str) -> Option<&str> {
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        }
+
         Ok(Self::new(
             pieces[0],
             pieces[1],
-            pieces.get(2).copied(),
-            pieces.get(3).copied(),
+            pieces.get(2).and_then(|s| none_if_empty(s)),
+            pieces.get(3).and_then(|s| none_if_empty(s)),
         ))
     }
 }

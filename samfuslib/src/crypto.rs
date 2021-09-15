@@ -105,7 +105,7 @@ impl FusAes256 {
         let iv = &padded_key[..16];
 
         let ga_key = GenericArray::from_slice(&padded_key);
-        let ga_iv = GenericArray::from_slice(&iv);
+        let ga_iv = GenericArray::from_slice(iv);
 
         cfg_if::cfg_if! {
             if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
@@ -170,7 +170,7 @@ pub enum FusFileAes128 {
 impl FusFileAes128 {
     /// Create a new cipher instance for decrypting FUS files.
     pub fn new(key: &[u8]) -> Self {
-        let ga_key = GenericArray::from_slice(&key);
+        let ga_key = GenericArray::from_slice(key);
         let ga_iv = &GenericArray::default();
 
         cfg_if::cfg_if! {

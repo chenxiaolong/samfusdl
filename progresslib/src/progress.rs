@@ -12,7 +12,7 @@ use crossterm::{
     cursor::{Hide, MoveToColumn, Show},
     QueueableCommand,
     Result,
-    style::{Colorize, Print},
+    style::{Print, Stylize},
     terminal::{self, Clear, ClearType},
     tty::IsTty,
 };

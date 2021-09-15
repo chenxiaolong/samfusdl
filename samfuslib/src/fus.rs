@@ -647,7 +647,7 @@ impl FusClient {
             result = result.and_then(|e| e.get_child(*p));
         }
 
-        result.and_then(|e| e.get_text())
+        result.map(|e| e.get_text().unwrap_or(Cow::Borrowed("")))
     }
 
     fn get_fus_field<'a>(elem: &'a Element, field: &str) -> Option<Cow<'a, str>> {

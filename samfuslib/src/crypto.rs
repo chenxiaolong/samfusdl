@@ -3,6 +3,7 @@ use std::{
     convert::TryInto,
 };
 
+use aes::{Aes128, Aes256};
 use block_modes::{BlockMode, Cbc, Ecb};
 use block_padding::{NoPadding, Padding, Pkcs7};
 use cipher::generic_array::GenericArray;
@@ -90,11 +91,7 @@ fn pad(mut data: &[u8], block_size: usize, truncate_to_block_size: bool) -> Vec<
 ///   and some bytes that look like padding.
 ///
 /// If AES-NI is supported, it will be used.
-pub enum FusAes256 {
-    Software(Cbc<aes_soft::Aes256, NoPadding>),
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    Hardware(Cbc<aesni::Aes256, NoPadding>),
-}
+pub struct FusAes256(Cbc<Aes256, NoPadding>);
 
 impl FusAes256 {
     /// Create a new cipher instance to perform AES operations in the way that
@@ -107,19 +104,8 @@ impl FusAes256 {
         let ga_key = GenericArray::from_slice(&padded_key);
         let ga_iv = GenericArray::from_slice(iv);
 
-        cfg_if::cfg_if! {
-            if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-                use std::is_x86_feature_detected;
-
-                if is_x86_feature_detected!("aes") && is_x86_feature_detected!("ssse3") {
-                    let cipher = Cbc::<aesni::Aes256, NoPadding>::new_fix(ga_key, ga_iv);
-                    return Self::Hardware(cipher)
-                }
-            }
-        }
-
-        let cipher = Cbc::<aes_soft::Aes256, NoPadding>::new_fix(ga_key, ga_iv);
-        Self::Software(cipher)
+        let cipher = Cbc::<Aes256, NoPadding>::new_fix(ga_key, ga_iv);
+        Self(cipher)
     }
 
     /// Encrypt the provided plaintext data. The data will be PKCS#7 padded to
@@ -128,11 +114,7 @@ impl FusAes256 {
         let mut buf = pad(data, BLOCK_SIZE, false);
         let buf_size = buf.len();
 
-        match self {
-            Self::Software(c) => c.encrypt(&mut buf, buf_size),
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            Self::Hardware(c) => c.encrypt(&mut buf, buf_size),
-        }.unwrap();
+        self.0.encrypt(&mut buf, buf_size).unwrap();
 
         buf
     }
@@ -140,11 +122,8 @@ impl FusAes256 {
     /// Decrypt the provided FUS ciphertext. The returned plain text will be
     /// PKCS#7 unpadded.
     pub fn decrypt(self, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        let mut plaintext = match self {
-            Self::Software(c) => c.decrypt_vec(data),
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            Self::Hardware(c) => c.decrypt_vec(data),
-        }.map_err(|_| CryptoError::CiphertextTooSmall)?;
+        let mut plaintext = self.0.decrypt_vec(data)
+            .map_err(|_| CryptoError::CiphertextTooSmall)?;
 
         let plaintext_len = match Pkcs7::unpad(&plaintext) {
             Ok(s) => s.len(),
@@ -161,11 +140,7 @@ impl FusAes256 {
 ///
 /// If AES-NI is supported, it will be used.
 #[derive(Clone)]
-pub enum FusFileAes128 {
-    Software(Ecb<aes_soft::Aes128, NoPadding>),
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    Hardware(Ecb<aesni::Aes128, NoPadding>),
-}
+pub struct FusFileAes128(Ecb<Aes128, NoPadding>);
 
 impl FusFileAes128 {
     /// Create a new cipher instance for decrypting FUS files.
@@ -173,28 +148,14 @@ impl FusFileAes128 {
         let ga_key = GenericArray::from_slice(key);
         let ga_iv = &GenericArray::default();
 
-        cfg_if::cfg_if! {
-            if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
-                use std::is_x86_feature_detected;
-
-                if is_x86_feature_detected!("aes") && is_x86_feature_detected!("ssse3") {
-                    let cipher = Ecb::<aesni::Aes128, NoPadding>::new_fix(ga_key, ga_iv);
-                    return Self::Hardware(cipher)
-                }
-            }
-        }
-
-        let cipher = Ecb::<aes_soft::Aes128, NoPadding>::new_fix(ga_key, ga_iv);
-        Self::Software(cipher)
+        let cipher = Ecb::<Aes128, NoPadding>::new_fix(ga_key, ga_iv);
+        Self(cipher)
     }
 
     /// Decrypt the provided ciphertext in-place.
     pub fn decrypt_in_place(self, buf: &mut [u8]) -> Result<(), CryptoError> {
-        match self {
-            Self::Software(c) => c.decrypt(buf),
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            Self::Hardware(c) => c.decrypt(buf),
-        }.map_err(|_| CryptoError::CiphertextTooSmall)?;
+        self.0.decrypt(buf)
+            .map_err(|_| CryptoError::CiphertextTooSmall)?;
 
         Ok(())
     }

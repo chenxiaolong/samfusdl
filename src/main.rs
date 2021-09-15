@@ -15,7 +15,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use clap::Clap;
+use clap::{ArgEnum, Clap};
 use crc32fast::Hasher;
 use futures::stream::FuturesUnordered;
 use log::{debug, Level, log_enabled, trace};
@@ -485,7 +485,7 @@ fn load_keys(opts: &Opts, config: &Option<Config>) -> Result<FusKeys> {
     Ok(FusKeys::new(fixed_key, flexible_key_suffix)?)
 }
 
-#[derive(Clap, Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(ArgEnum, Clap, Clone, Copy, Debug, Eq, PartialEq)]
 enum FirmwareType {
     Home,
     Factory,
@@ -506,7 +506,7 @@ impl fmt::Display for FirmwareType {
     }
 }
 
-#[derive(Clap, Clone, Copy, Debug)]
+#[derive(ArgEnum, Clap, Clone, Copy, Debug)]
 enum LogLevel {
     Debug,
     Trace,
@@ -601,7 +601,7 @@ struct Opts {
     ///
     /// This option allows the firmware type (also known as "binary nature") to
     /// be selected. By default, the "home" firmware is downloaded.
-    #[clap(arg_enum, short = 't', default_value)]
+    #[clap(arg_enum, short = 't', default_value_t)]
     firmware_type: FirmwareType,
     /// Output path for decrypted firmware
     ///

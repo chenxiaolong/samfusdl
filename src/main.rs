@@ -533,7 +533,7 @@ impl FromStr for NumChunks {
             return Err(anyhow!("value cannot be 0"));
         } else if n > MAX_RANGES as u64 {
             // Same limit as aria2 to avoid unintentional DoS
-            return Err(anyhow!("too many chunks"));
+            return Err(anyhow!("too many chunks (>{})", MAX_RANGES));
         }
 
         Ok(Self(n))
@@ -634,7 +634,8 @@ struct Opts {
     /// chunk will be split in half, with both parts downloaded in parallel.
     /// This ensures that there's always <n> chunks downloading in parallel
     /// until the chunks are too small to be worth splitting (1MiB). This also
-    /// prevents one slow connection from slowing down the entire download.
+    /// prevents one slow connection from slowing down the entire download. The
+    /// maximum number of chunks allowed is 16.
     #[clap(short, long, default_value = "4")]
     chunks: NumChunks,
     /// Maximum retries during download
@@ -685,7 +686,7 @@ async fn main() -> Result<()> {
     let opts = Opts::parse();
 
     if let Some(l) = opts.loglevel {
-        std::env::set_var("RUST_LOG", format!("{}={}", PKG_NAME, l));
+        std::env::set_var("RUST_LOG", format!("{}={},samfuslib={}", PKG_NAME, l, l));
     }
 
     env_logger::init();

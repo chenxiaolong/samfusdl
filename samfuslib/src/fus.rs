@@ -14,6 +14,7 @@ use std::{
 
 use bytes::Bytes;
 use futures_core::Stream;
+use log::debug;
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_LENGTH, RANGE},
     RequestBuilder, Response,
@@ -25,6 +26,11 @@ use xmltree::{Element, XMLNode};
 const FOTA_BASE_URL: &str = "https://fota-cloud-dn.ospserver.net";
 const FUS_BASE_URL: &str = "https://neofussvr.sslcs.cdngc.net";
 const DOWNLOAD_BASE_URL: &str = "http://cloud-neofussvr.sslcs.cdngc.net";
+const NON_UTF8_MSG: &str = "[Non-UTF-8 data]";
+
+fn to_utf8_or_error_string(data: &[u8]) -> &str {
+    str::from_utf8(data).unwrap_or(NON_UTF8_MSG)
+}
 
 #[derive(Debug, Error)]
 pub enum FusError {
@@ -209,7 +215,7 @@ impl Nonce {
 impl fmt::Display for Nonce {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Intentionally keep error text at 16 bytes
-        write!(f, "{}", str::from_utf8(&self.data).unwrap_or("[Non-UTF-8 data]"))
+        write!(f, "{}", to_utf8_or_error_string(&self.data))
     }
 }
 
@@ -334,6 +340,8 @@ impl FusClient {
     /// Build a new FUS client object with the options from the specified
     /// builder.
     fn with_options(options: &FusClientBuilder) -> Result<Self, FusError> {
+        debug!("TLS validation enabled: {}", !options.ignore_tls_validation);
+
         let client = reqwest::ClientBuilder::new()
             .danger_accept_invalid_certs(options.ignore_tls_validation)
             .cookie_store(true)
@@ -351,6 +359,8 @@ impl FusClient {
     /// CSC region code.
     pub async fn get_latest_version(&self, model: &str, region: &str) -> Result<FwVersion, FusError> {
         let url = format!("{}/firmware/{}/{}/version.xml", FOTA_BASE_URL, region, model);
+        debug!("FOTA URL: {}", url);
+
         let r = self.client.get(&url).send().await?;
         match r.error_for_status_ref() {
             Ok(_) => {}
@@ -364,7 +374,10 @@ impl FusClient {
             }
         }
 
-        let root = Element::parse(r.bytes().await?.as_ref())?;
+        let data = r.bytes().await?;
+        debug!("FOTA response: {:?}", to_utf8_or_error_string(&data));
+
+        let root = Element::parse(data.as_ref())?;
         let version = Self::get_elem_text(&root, &["firmware", "version", "latest"])
             .ok_or(FusError::FirmwareNotFound)?;
 
@@ -390,6 +403,8 @@ impl FusClient {
         }
 
         let url = format!("{}/NF_DownloadGenerateNonce.do", FUS_BASE_URL);
+        debug!("Requesting nonce from: {}", url);
+
         let r = self.client.post(&url)
             .header(AUTHORIZATION, Authorization::new().to_string())
             .header(CONTENT_LENGTH, 0)
@@ -430,12 +445,20 @@ impl FusClient {
         body: &Element,
         auth_include_nonce: bool,
     ) -> Result<Element, FusError> {
+        debug!("FUS URL: {}", url);
+
         let mut buf = vec![];
         body.write(&mut buf)?;
 
+        debug!("FUS request: {:?}", to_utf8_or_error_string(&buf));
+
         let request = self.client.post(url).body(buf);
         let r = self.execute_fus_request(request, auth_include_nonce).await?;
-        let root = Element::parse(r.bytes().await?.as_ref())?;
+        let data = r.bytes().await?;
+
+        debug!("FUS response: {:?}", to_utf8_or_error_string(&data));
+
+        let root = Element::parse(data.as_ref())?;
 
         // HTTP 200, but there might still be a FUS error
         let status = Self::get_elem_text(&root, &["FUSBody", "Results", "Status"])
@@ -534,6 +557,9 @@ impl FusClient {
             info.path,
             info.filename,
         );
+
+        debug!("Requesting bytes {}-{} from: {}", range.start, range.end, url);
+
         let r = self.execute_fus_request(
             self.client.get(&url)
                 .header(RANGE, format!("bytes={}-{}", range.start, range.end)),

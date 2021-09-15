@@ -159,13 +159,13 @@ impl Nonce {
     }
 
     /// Convert nonce to fixed-key-encrypted nonce.
-    pub fn to_encrypted(&self, keys: &FusKeys) -> String {
+    pub fn to_encrypted(self, keys: &FusKeys) -> String {
         base64::encode(FusAes256::new(&keys.fixed_key).encrypt(&self.data))
     }
 
     /// Get the nonce signature to be used in the Authorization header for FUS
     /// requests.
-    fn to_signature(&self, keys: &FusKeys) -> String {
+    fn to_signature(self, keys: &FusKeys) -> String {
         let key = keys.get_flexible_key(self.as_slice());
         let ciphertext = FusAes256::new(&key).encrypt(self.as_slice());
 
@@ -173,13 +173,13 @@ impl Nonce {
     }
 
     /// Get full Authorization header value containing the nonce signature.
-    fn to_authorization(&self, keys: &FusKeys) -> Authorization {
+    fn to_authorization(self, keys: &FusKeys) -> Authorization {
         Authorization::with_signature(&self.to_signature(keys))
     }
 
     /// Get the scrambled nonce value to be used in the <LOGIC_CHECK> XML tag of
     /// FUS requests.
-    fn to_logic_check(&self, lc_type: LogicCheckType) -> String {
+    fn to_logic_check(self, lc_type: LogicCheckType) -> String {
         match lc_type {
             LogicCheckType::Data(data) => {
                 if data.is_empty() {
@@ -521,7 +521,7 @@ impl FusClient {
     ) -> Result<impl Stream<Item = reqwest::Result<Bytes>>, FusError> {
         // It is necessary to inform the service of the intention to download
         let nonce = self.ensure_nonce().await?;
-        let req_root = Self::create_binary_init_elem(&info, nonce);
+        let req_root = Self::create_binary_init_elem(info, nonce);
 
         let url = format!("{}/NF_DownloadBinaryInitForMass.do", FUS_BASE_URL);
         self.execute_fus_xml_request(&url, &req_root, false).await?;

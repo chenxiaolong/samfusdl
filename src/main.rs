@@ -15,7 +15,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use clap::{ArgEnum, Clap};
+use clap::{ArgEnum, Parser};
 use crc32fast::Hasher;
 use futures::stream::FuturesUnordered;
 use log::{debug, Level, log_enabled, trace};
@@ -485,7 +485,7 @@ fn load_keys(opts: &Opts, config: &Option<Config>) -> Result<FusKeys> {
     Ok(FusKeys::new(fixed_key, flexible_key_suffix)?)
 }
 
-#[derive(ArgEnum, Clap, Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(ArgEnum, Clone, Copy, Debug, Eq, Parser, PartialEq)]
 enum FirmwareType {
     Home,
     Factory,
@@ -506,7 +506,7 @@ impl fmt::Display for FirmwareType {
     }
 }
 
-#[derive(ArgEnum, Clap, Clone, Copy, Debug)]
+#[derive(ArgEnum, Clone, Copy, Debug, Parser)]
 enum LogLevel {
     Debug,
     Trace,
@@ -580,7 +580,7 @@ fn load_config_file(user_path: Option<&Path>) -> Result<Option<Config>> {
 }
 
 /// A simple tool for quickly downloading official firmware files from FUS.
-#[derive(Clap, Debug)]
+#[derive(Debug, Parser)]
 #[clap(author, version)]
 struct Opts {
     /// Device's model number (eg. SM-N986U)

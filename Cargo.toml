@@ -1,6 +1,6 @@
 [package]
 name = "samfusdl"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Andrew Gunnerson <chillermillerlong@hotmail.com>"]
 edition = "2018"
 

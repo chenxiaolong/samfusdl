@@ -5,5 +5,5 @@ authors = ["Andrew Gunnerson <chillermillerlong@hotmail.com>"]
 edition = "2018"
 
 [dependencies]
-crossterm = "0.21.0"
+crossterm = "0.22.1"
 number_prefix = "0.4.0"

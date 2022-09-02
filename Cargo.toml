@@ -10,8 +10,6 @@ clap = { version = "3.2.20", features = ["derive", "env"] }
 crc32fast = "1.3.2"
 dirs = "4.0.0"
 env_logger = "0.9.0"
-futures = "0.3.24"
-futures-util = "0.3.24"
 log = "0.4.17"
 progresslib = { path = "progresslib" }
 samfuslib = { path = "samfuslib" }

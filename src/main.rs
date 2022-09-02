@@ -17,13 +17,12 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use clap::{ArgEnum, Parser};
 use crc32fast::Hasher;
-use futures::stream::FuturesUnordered;
 use log::{debug, Level, log_enabled, trace};
 use serde::{Deserialize, Serialize};
 use tokio::{
     signal::ctrl_c,
     sync::{mpsc, oneshot},
-    task,
+    task::{self, JoinSet},
 };
 use tokio_stream::StreamExt;
 
@@ -165,7 +164,7 @@ async fn download_chunks(
     bar.set_position(info.size - remaining)?;
 
     let mut task_ranges = chunks.to_vec();
-    let mut tasks = FuturesUnordered::new();
+    let mut tasks = JoinSet::new();
     let mut last_state_write = Instant::now();
     let mut error_count = 0u8;
     let (tx, mut rx) = mpsc::channel(task_ranges.len());
@@ -176,14 +175,14 @@ async fn download_chunks(
 
     // Start downloading evenly split chunks.
     for (i, task_range) in task_ranges.iter().enumerate() {
-        tasks.push(tokio::spawn(download_task(
+        tasks.spawn(download_task(
             TaskId(i),
             client_builder.clone(),
             file.try_clone().context("Could not duplicate file handle")?,
             info.clone(),
             task_range.clone(),
             tx.clone(),
-        )));
+        ));
     }
 
     loop {
@@ -226,7 +225,7 @@ async fn download_chunks(
             }
 
             // Received completion message.
-            r = tasks.next() => {
+            r = tasks.join_next() => {
                 match r {
                     // All tasks exited
                     None => {
@@ -275,14 +274,14 @@ async fn download_chunks(
                         debug!("[{}] Downloading newly split range {:?}", task_id, new_range);
                         task_ranges[task_id.0] = new_range.clone();
 
-                        tasks.push(tokio::spawn(download_task(
+                        tasks.spawn(download_task(
                             task_id,
                             client_builder.clone(),
                             file.try_clone().context("Could not duplicate file handle")?,
                             info.clone(),
                             new_range,
                             tx.clone(),
-                        )));
+                        ));
                     }
 
                     // Task failed
@@ -298,14 +297,14 @@ async fn download_chunks(
                         bar.println(format!("Retrying (attempt {}/{}) ...", error_count, max_errors))?;
                         debug!("[{}] Retrying incomplete range {:?}", task_id, task_ranges[task_id.0]);
 
-                        tasks.push(tokio::spawn(download_task(
+                        tasks.spawn(download_task(
                             task_id,
                             client_builder.clone(),
                             file.try_clone().context("Could not duplicate file handle")?,
                             info.clone(),
                             task_ranges[task_id.0].clone(),
                             tx.clone(),
-                        )));
+                        ));
                     }
                 }
             }

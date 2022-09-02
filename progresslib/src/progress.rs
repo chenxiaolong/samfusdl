@@ -106,7 +106,7 @@ pub enum ProgressDrawMode {
 }
 
 impl ProgressDrawMode {
-    fn default_fps(&self) -> f64 {
+    fn default_fps(self) -> f64 {
         match self {
             Self::Interactive => 15.0,
             Self::Append => 0.2,
@@ -118,7 +118,7 @@ impl ProgressDrawMode {
 impl<T: Write + IsTty> ProgressBar<T> {
     /// Construct a new progress bar. By default, every update is rendered
     /// immediately. Call `set_fps` to reduce the rendering rate.
-    pub fn new(term: T, len: u64) -> ProgressBar<T> {
+    pub fn new(term: T, len: u64) -> Self {
         let mode = if term.is_tty() {
             ProgressDrawMode::Interactive
         } else {
@@ -126,7 +126,7 @@ impl<T: Write + IsTty> ProgressBar<T> {
         };
         let now = Instant::now();
 
-        ProgressBar {
+        Self {
             len,
             pos: 0,
             term,
@@ -306,7 +306,7 @@ impl<T: Write + IsTty> ProgressBar<T> {
             let bar_remaining = bar_width.saturating_sub(bar_consumed);
 
             if bar_width != 0 {
-                result = result.replace("\x00", &format!(
+                result = result.replace('\x00', &format!(
                     "{}{} ",
                     "#".repeat(bar_consumed).cyan(),
                     "-".repeat(bar_remaining).blue(),

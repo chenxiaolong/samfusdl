@@ -119,11 +119,12 @@ impl fmt::Display for Authorization {
             self.nc,
             self.type_,
             self.realm,
-            self.newauth as u8
+            u8::from(self.newauth),
         )
     }
 }
 
+#[derive(Clone, Copy)]
 enum LogicCheckType<'a> {
     Data(&'a [u8]),
     Filename(&'a str),
@@ -161,7 +162,7 @@ impl Nonce {
     pub fn from_encrypted(keys: &FusKeys, data: &[u8]) -> Result<Self, FusError> {
         let decoded = base64::decode(data)?;
         let plaintext = FusAes256::new(&keys.fixed_key).decrypt(&decoded)?;
-        Nonce::from_slice(&plaintext)
+        Self::from_slice(&plaintext)
     }
 
     /// Convert nonce to fixed-key-encrypted nonce.
@@ -271,7 +272,7 @@ impl FirmwareInfo {
             Nonce::from_slice(logic_value.as_bytes())?
                 .to_logic_check(LogicCheckType::Data(self.version.to_string().as_bytes()))
         } else {
-            format!("{}:{}:{}", self.region, self.model, self.version.to_string())
+            format!("{}:{}:{}", self.region, self.model, self.version)
         };
 
         let digest = md5::compute(key.as_bytes());
@@ -366,10 +367,10 @@ impl FusClient {
             Ok(_) => {}
             Err(e) => {
                 // The FOTA server returns 403 when the page is not found
-                if e.status() == Some(reqwest::StatusCode::FORBIDDEN) {
-                    return Err(FusError::FirmwareNotFound);
+                return if e.status() == Some(reqwest::StatusCode::FORBIDDEN) {
+                    Err(FusError::FirmwareNotFound)
                 } else {
-                    return Err(e.into());
+                    Err(e.into())
                 }
             }
         }

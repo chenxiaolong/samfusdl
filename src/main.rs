@@ -66,7 +66,7 @@ struct ProgressMessage {
 }
 
 /// Download a byte range of a firmware file. The number of bytes downloaded per
-/// loop iteration will be sent to the specified channel via a ProgressMessage.
+/// loop iteration will be sent to the specified channel via a `ProgressMessage`.
 /// The receiver of the message must reply with the new ending offset for this
 /// download via the oneshot channel in the `resp` field. An appropriate error
 /// will be returned if the full range (subject to modification) cannot be fully
@@ -88,12 +88,11 @@ async fn download_range(
     let mut range = initial_range.clone();
 
     while range.start < range.end {
-        let data = match stream.next().await {
-            Some(x) => x?,
-            None => {
-                debug!("[{}] Received unexpected EOF from server", task_id);
-                return Err(anyhow!("Unexpected EOF from server"));
-            }
+        let data = if let Some(x) = stream.next().await {
+            x?
+        } else {
+            debug!("[{}] Received unexpected EOF from server", task_id);
+            return Err(anyhow!("Unexpected EOF from server"));
         };
         trace!("[{}] Received {} bytes", task_id, data.len());
 
@@ -132,8 +131,8 @@ async fn download_range(
     Ok(())
 }
 
-/// Create download task for a byte range. This just calls download_range() and
-/// returns a tuple containing the task ID and the result.
+/// Create download task for a byte range. This just calls `download_range`()
+/// and returns a tuple containing the task ID and the result.
 async fn download_task(
     task_id: TaskId,
     client_builder: FusClientBuilder,
@@ -555,7 +554,7 @@ fn default_config_path() -> Option<PathBuf> {
 
 fn load_config_file(user_path: Option<&Path>) -> Result<Option<Config>> {
     let default_path = default_config_path();
-    let path = user_path.or_else(|| default_path.as_deref());
+    let path = user_path.or(default_path.as_deref());
 
     match path {
         Some(p) => {

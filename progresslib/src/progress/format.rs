@@ -35,7 +35,7 @@ pub struct HumanDuration(pub Duration);
 impl fmt::Display for HumanDuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let secs = self.0.as_secs();
-        let nanos = self.0.subsec_nanos() as u64;
+        let nanos = u64::from(self.0.subsec_nanos());
 
         if secs == 0 && nanos == 0 {
             return if f.alternate() {
@@ -68,7 +68,7 @@ impl fmt::Display for HumanDuration {
 
         let mut first = true;
 
-        for (value, full, abbrev) in [
+        for (value, full, abbrev) in &[
             (years, "year", "y"),
             (months, "month", "M"),
             (days, "day", "d"),
@@ -78,7 +78,7 @@ impl fmt::Display for HumanDuration {
             (millis, "millisecond", "ms"),
             (micros, "microsecond", "us"),
             (nanos, "nanosecond", "ns"),
-        ].iter() {
+        ] {
             if *value > 0 {
                 if first {
                     first = false;
@@ -107,7 +107,7 @@ pub struct ClockDuration(pub Duration);
 impl fmt::Display for ClockDuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let secs = self.0.as_secs();
-        let nanos = self.0.subsec_nanos() as u64;
+        let nanos = u64::from(self.0.subsec_nanos());
 
         let hours = secs / SECS_PER_HOUR;
         let remain = secs % SECS_PER_HOUR;

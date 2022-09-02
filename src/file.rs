@@ -130,7 +130,7 @@ pub fn rename_atomic(src: &Path, dest: &Path) -> io::Result<()> {
     }
 
     unsafe {
-        let info = buf.as_mut_ptr() as *mut FILE_RENAME_INFO;
+        let info = buf.as_mut_ptr().cast::<FILE_RENAME_INFO>();
         // Actually is a union with 'flags' field. 'flags' is used with
         // FileRenameInfoEx
         (*info).ReplaceIfExists = (FILE_RENAME_FLAG_REPLACE_IF_EXISTS
@@ -143,7 +143,7 @@ pub fn rename_atomic(src: &Path, dest: &Path) -> io::Result<()> {
         let ret = SetFileInformationByHandle(
             file.as_raw_handle(),
             FileRenameInfoEx,
-            buf.as_mut_ptr() as *mut _ as *mut _,
+            buf.as_mut_ptr().cast(),
             buf.len() as DWORD * 2, // byte size
         );
 

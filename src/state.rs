@@ -213,7 +213,7 @@ impl StateFile {
         let block_offset = if new_parity { STATE2_OFFSET } else { STATE1_OFFSET };
         let ranges = self.read_ranges_block(block_offset)?;
 
-        debug!("Read ranges for parity {}: {:?}", new_parity as u8, ranges);
+        debug!("Read ranges for parity {}: {:?}", u8::from(new_parity), ranges);
 
         self.parity_bit = new_parity;
         self.invalid = false;
@@ -228,7 +228,7 @@ impl StateFile {
     pub fn write_state(&mut self, ranges: &[Range<u64>]) -> io::Result<()> {
         let new_parity = !self.parity_bit;
 
-        debug!("Writing ranges for parity {}: {:?}", new_parity as u8, ranges);
+        debug!("Writing ranges for parity {}: {:?}", u8::from(new_parity), ranges);
 
         write_all_at(
             &mut self.file,
@@ -243,7 +243,7 @@ impl StateFile {
 
         write_all_at(
             &mut self.file,
-            &[new_parity as u8],
+            &[u8::from(new_parity)],
             self.offset + PARITY_OFFSET,
         )?;
         self.file.flush()?;

@@ -840,7 +840,7 @@ dependencies = [
 
 [[package]]
 name = "progresslib"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "crossterm",
  "number_prefix",
@@ -966,7 +966,7 @@ checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
 
 [[package]]
 name = "samfusdl"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -986,7 +986,7 @@ dependencies = [
 
 [[package]]
 name = "samfuslib"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "aes",
  "assert_matches",

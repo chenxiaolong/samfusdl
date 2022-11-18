@@ -15,7 +15,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use clap::{ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 use crc32fast::Hasher;
 use log::{debug, Level, log_enabled, trace};
 use serde::{Deserialize, Serialize};
@@ -483,7 +483,7 @@ fn load_keys(opts: &Opts, config: &Option<Config>) -> Result<FusKeys> {
     Ok(FusKeys::new(fixed_key, flexible_key_suffix)?)
 }
 
-#[derive(ArgEnum, Clone, Copy, Debug, Eq, Parser, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Parser, PartialEq, ValueEnum)]
 enum FirmwareType {
     Home,
     Factory,
@@ -504,7 +504,7 @@ impl fmt::Display for FirmwareType {
     }
 }
 
-#[derive(ArgEnum, Clone, Copy, Debug, Parser)]
+#[derive(Clone, Copy, Debug, Parser, ValueEnum)]
 enum LogLevel {
     Debug,
     Trace,
@@ -519,7 +519,7 @@ impl fmt::Display for LogLevel {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 struct NumChunks(u64);
 
 impl FromStr for NumChunks {
@@ -599,14 +599,14 @@ struct Opts {
     ///
     /// This option allows the firmware type (also known as "binary nature") to
     /// be selected. By default, the "home" firmware is downloaded.
-    #[clap(arg_enum, short = 't', default_value_t)]
+    #[clap(short = 't', default_value_t, value_enum)]
     firmware_type: FirmwareType,
     /// Output path for decrypted firmware
     ///
     /// By default, the output path is the filename returned by the server. This
     /// does not present a security issue because all path components are
     /// ignored.
-    #[clap(short, long, parse(from_os_str))]
+    #[clap(short, long, value_parser)]
     output: Option<PathBuf>,
     /// Allow overwriting the output file if it exists
     ///
@@ -624,7 +624,7 @@ struct Opts {
     /// and write messages are also printed out, which can be extremely verbose.
     /// This option overrides the RUST_LOG environment variable, which would
     /// otherwise be respected if this option was not passed.
-    #[clap(arg_enum, long)]
+    #[clap(long, value_enum)]
     loglevel: Option<LogLevel>,
     /// Number of chunks to download in parallel
     ///
@@ -675,7 +675,7 @@ struct Opts {
     /// If unspecified, the default config file path is used. The config file
     /// can store the FUS keys to avoid needing to set environment variables or
     /// pass them as command-line arguments.
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, value_parser)]
     config: Option<PathBuf>,
 }
 

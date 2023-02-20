@@ -126,7 +126,7 @@ impl StateFile {
 
         if size > MAX_RANGES {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
-                format!("Too many ranges: {}", size)));
+                format!("Too many ranges: {size}")));
         }
 
         let mut result = Vec::new();
@@ -140,7 +140,7 @@ impl StateFile {
             result.push(start..end);
         }
 
-        debug!("Validating ranges block data: {:?}", result);
+        debug!("Validating ranges block data: {result:?}");
 
         result.sort_by_key(|r| r.start);
         result.retain(|r| r.end - r.start > 0);
@@ -153,7 +153,7 @@ impl StateFile {
         };
 
         if !result.windows(2).all(is_increasing) {
-            debug!("Ranges overlap or are not increasing: {:?}", result);
+            debug!("Ranges overlap or are not increasing: {result:?}");
 
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                 "Ranges overlap or are not increasing"));
@@ -213,7 +213,7 @@ impl StateFile {
         let block_offset = if new_parity { STATE2_OFFSET } else { STATE1_OFFSET };
         let ranges = self.read_ranges_block(block_offset)?;
 
-        debug!("Read ranges for parity {}: {:?}", u8::from(new_parity), ranges);
+        debug!("Read ranges for parity {}: {ranges:?}", u8::from(new_parity));
 
         self.parity_bit = new_parity;
         self.invalid = false;
@@ -228,7 +228,7 @@ impl StateFile {
     pub fn write_state(&mut self, ranges: &[Range<u64>]) -> io::Result<()> {
         let new_parity = !self.parity_bit;
 
-        debug!("Writing ranges for parity {}: {:?}", u8::from(new_parity), ranges);
+        debug!("Writing ranges for parity {}: {ranges:?}", u8::from(new_parity));
 
         write_all_at(
             &mut self.file,

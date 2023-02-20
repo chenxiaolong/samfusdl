@@ -13,10 +13,10 @@ impl fmt::Display for BinarySize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match NumberPrefix::binary(self.0 as f64) {
             NumberPrefix::Standalone(number) => {
-                write!(f, "{:.0}B", number)
+                write!(f, "{number:.0}B")
             }
             NumberPrefix::Prefixed(prefix, number) => {
-                write!(f, "{:.2}{}B", number, prefix)
+                write!(f, "{number:.2}{prefix}B")
             }
         }
     }
@@ -86,7 +86,7 @@ impl fmt::Display for HumanDuration {
                     f.write_str(" ")?;
                 }
 
-                write!(f, "{}", value)?;
+                write!(f, "{value}")?;
 
                 if f.alternate() {
                     write!(f, " {}{}", full, if *value > 1 { "s" } else { "" })?;
@@ -117,10 +117,10 @@ impl fmt::Display for ClockDuration {
 
         let secs = remain;
 
-        write!(f, "{:02}:{:02}:{:02}", hours, minutes, secs)?;
+        write!(f, "{hours:02}:{minutes:02}:{secs:02}")?;
 
         if nanos > 0 || f.alternate() {
-            write!(f, ".{:09}", nanos)?;
+            write!(f, ".{nanos:09}")?;
         }
 
         Ok(())
@@ -174,8 +174,8 @@ mod tests {
 
         for &(secs, nanos, short, long) in test_cases.iter() {
             let d = HumanDuration(Duration::new(secs, nanos));
-            assert_eq!(format!("{}", d), short);
-            assert_eq!(format!("{:#}", d), long);
+            assert_eq!(format!("{d}"), short);
+            assert_eq!(format!("{d:#}"), long);
         }
     }
 
@@ -196,8 +196,8 @@ mod tests {
 
         for &(secs, nanos, short, long) in test_cases.iter() {
             let d = ClockDuration(Duration::new(secs, nanos));
-            assert_eq!(format!("{}", d), short);
-            assert_eq!(format!("{:#}", d), long);
+            assert_eq!(format!("{d}"), short);
+            assert_eq!(format!("{d:#}"), long);
         }
     }
 }

@@ -12,6 +12,10 @@ use std::{
     str,
 };
 
+use base64::{
+    Engine,
+    engine::general_purpose::STANDARD,
+};
 use bytes::Bytes;
 use futures_core::Stream;
 use log::debug;
@@ -160,14 +164,14 @@ impl Nonce {
 
     /// Create instance from a fixed-key-encrypted nonce value.
     pub fn from_encrypted(keys: &FusKeys, data: &[u8]) -> Result<Self, FusError> {
-        let decoded = base64::decode(data)?;
+        let decoded = STANDARD.decode(data)?;
         let plaintext = FusAes256::new(&keys.fixed_key).decrypt(&decoded)?;
         Self::from_slice(&plaintext)
     }
 
     /// Convert nonce to fixed-key-encrypted nonce.
     pub fn to_encrypted(self, keys: &FusKeys) -> String {
-        base64::encode(FusAes256::new(&keys.fixed_key).encrypt(&self.data))
+        STANDARD.encode(FusAes256::new(&keys.fixed_key).encrypt(&self.data))
     }
 
     /// Get the nonce signature to be used in the Authorization header for FUS
@@ -176,7 +180,7 @@ impl Nonce {
         let key = keys.get_flexible_key(self.as_slice());
         let ciphertext = FusAes256::new(&key).encrypt(self.as_slice());
 
-        base64::encode(ciphertext)
+        STANDARD.encode(ciphertext)
     }
 
     /// Get full Authorization header value containing the nonce signature.
@@ -184,8 +188,8 @@ impl Nonce {
         Authorization::with_signature(&self.to_signature(keys))
     }
 
-    /// Get the scrambled nonce value to be used in the <LOGIC_CHECK> XML tag of
-    /// FUS requests.
+    /// Get the scrambled nonce value to be used in the `<LOGIC_CHECK>` XML tag
+    /// of FUS requests.
     fn to_logic_check(self, lc_type: LogicCheckType) -> String {
         match lc_type {
             LogicCheckType::Data(data) => {
@@ -359,8 +363,8 @@ impl FusClient {
     /// Get the latest available firmware version for a given model number and
     /// CSC region code.
     pub async fn get_latest_version(&self, model: &str, region: &str) -> Result<FwVersion, FusError> {
-        let url = format!("{}/firmware/{}/{}/version.xml", FOTA_BASE_URL, region, model);
-        debug!("FOTA URL: {}", url);
+        let url = format!("{FOTA_BASE_URL}/firmware/{region}/{model}/version.xml");
+        debug!("FOTA URL: {url}");
 
         let r = self.client.get(&url).send().await?;
         match r.error_for_status_ref() {
@@ -403,8 +407,8 @@ impl FusClient {
             return Ok(nonce);
         }
 
-        let url = format!("{}/NF_DownloadGenerateNonce.do", FUS_BASE_URL);
-        debug!("Requesting nonce from: {}", url);
+        let url = format!("{FUS_BASE_URL}/NF_DownloadGenerateNonce.do");
+        debug!("Requesting nonce from: {url}");
 
         let r = self.client.post(&url)
             .header(AUTHORIZATION, Authorization::new().to_string())
@@ -446,7 +450,7 @@ impl FusClient {
         body: &Element,
         auth_include_nonce: bool,
     ) -> Result<Element, FusError> {
-        debug!("FUS URL: {}", url);
+        debug!("FUS URL: {url}");
 
         let mut buf = vec![];
         body.write(&mut buf)?;
@@ -483,7 +487,7 @@ impl FusClient {
         let nonce = self.ensure_nonce().await?;
         let req_root = Self::create_binary_inform_elem(model, region, version, nonce, factory);
 
-        let url = format!("{}/NF_DownloadBinaryInform.do", FUS_BASE_URL);
+        let url = format!("{FUS_BASE_URL}/NF_DownloadBinaryInform.do");
         let resp_root = self.execute_fus_xml_request(&url, &req_root, false).await?;
 
         macro_rules! get_value {
@@ -547,7 +551,7 @@ impl FusClient {
         let nonce = self.ensure_nonce().await?;
         let req_root = Self::create_binary_init_elem(info, nonce);
 
-        let url = format!("{}/NF_DownloadBinaryInitForMass.do", FUS_BASE_URL);
+        let url = format!("{FUS_BASE_URL}/NF_DownloadBinaryInitForMass.do");
         self.execute_fus_xml_request(&url, &req_root, false).await?;
 
         // Download binary. This intentionally does not use RequestBuilder.query() because FUS has
@@ -559,7 +563,7 @@ impl FusClient {
             info.filename,
         );
 
-        debug!("Requesting bytes {}-{} from: {}", range.start, range.end, url);
+        debug!("Requesting bytes {}-{} from: {url}", range.start, range.end);
 
         let r = self.execute_fus_request(
             self.client.get(&url)

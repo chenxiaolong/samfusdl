@@ -280,7 +280,7 @@ impl<T: Write + IsTty> ProgressBar<T> {
 
         let elapsed = Duration::from_secs(self.started.elapsed().as_secs());
         let eta = Duration::from_secs(self.eta().as_secs());
-        let ratio = (self.pos as f64 / self.len as f64).max(0.0).min(1.0);
+        let ratio = (self.pos as f64 / self.len as f64).clamp(0.0, 1.0);
 
         let mut result = format!(
             "[{elapsed}] {bar_placeholder}{percent:.0}% {pos}/{len} ({speed}/s, {eta})",

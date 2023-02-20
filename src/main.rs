@@ -78,7 +78,7 @@ async fn download_range(
     initial_range: Range<u64>,
     channel: mpsc::Sender<ProgressMessage>,
 ) -> Result<()> {
-    debug!("[{}] Starting download with initial range: {:?}", task_id, initial_range);
+    debug!("[{task_id}] Starting download with initial range: {initial_range:?}");
 
     let mut client = client_builder.build()
         .context("Could not initialize FUS client")?;
@@ -90,10 +90,10 @@ async fn download_range(
         let data = if let Some(x) = stream.next().await {
             x?
         } else {
-            debug!("[{}] Received unexpected EOF from server", task_id);
+            debug!("[{task_id}] Received unexpected EOF from server");
             return Err(anyhow!("Unexpected EOF from server"));
         };
-        trace!("[{}] Received {} bytes", task_id, data.len());
+        trace!("[{task_id}] Received {} bytes", data.len());
 
         // This may overlap with another task's write when a range split occurs,
         // but the same data will be written anyway, so it's not a huge deal.
@@ -121,7 +121,7 @@ async fn download_range(
         // Get new ending offset from controller.
         let new_end = rx.await?;
         if new_end != range.end {
-            debug!("[{}] Ending offset changed to {:?}", task_id, new_end);
+            debug!("[{task_id}] Ending offset changed to {new_end:?}");
             debug_assert!(new_end <= range.end);
             range.end = new_end;
         }
@@ -240,10 +240,10 @@ async fn download_chunks(
 
                     // Task completed successfully
                     Some(Ok((task_id, Ok(_)))) => {
-                        debug!("[{}] Completed download", task_id);
+                        debug!("[{task_id}] Completed download");
 
                         if error_count >= max_errors {
-                            debug!("Exceeded max error count: {}", max_errors);
+                            debug!("Exceeded max error count: {max_errors}");
                             continue;
                         }
 
@@ -260,7 +260,7 @@ async fn download_chunks(
                             continue;
                         }
 
-                        debug!("Candidate for range splitting: {:?}", largest_range);
+                        debug!("Candidate for range splitting: {largest_range:?}");
 
                         let ranges = split_range(largest_range.clone(), 2, Some(MIN_CHUNK_SIZE));
                         if ranges.len() < 2 {
@@ -271,7 +271,7 @@ async fn download_chunks(
                         largest_range.end = ranges[0].end;
                         let new_range = ranges[1].clone();
 
-                        debug!("[{}] Downloading newly split range {:?}", task_id, new_range);
+                        debug!("[{task_id}] Downloading newly split range {new_range:?}");
                         task_ranges[task_id.0] = new_range.clone();
 
                         tasks.spawn(download_task(
@@ -290,12 +290,12 @@ async fn download_chunks(
                         error_count += 1;
 
                         if error_count >= max_errors {
-                            debug!("Exceeded max error count: {}", max_errors);
+                            debug!("Exceeded max error count: {max_errors}");
                             continue;
                         }
 
-                        bar.println(format!("Retrying (attempt {}/{}) ...", error_count, max_errors))?;
-                        debug!("[{}] Retrying incomplete range {:?}", task_id, task_ranges[task_id.0]);
+                        bar.println(format!("Retrying (attempt {error_count}/{max_errors}) ..."))?;
+                        debug!("[{task_id}] Retrying incomplete range {:?}", task_ranges[task_id.0]);
 
                         tasks.spawn(download_task(
                             task_id,
@@ -349,9 +349,9 @@ fn crc32_and_decrypt(
 ) -> Result<u32> {
     let mut size = input_file.seek(SeekFrom::End(0))
         .context("Failed to get input file size")?;
-    input_file.seek(SeekFrom::Start(0))
+    input_file.rewind()
         .context("Failed to seek input file")?;
-    output_file.seek(SeekFrom::Start(0))
+    output_file.rewind()
         .context("Failed to seek output file")?;
 
     let mut bar = create_progress_bar(size);
@@ -391,7 +391,7 @@ async fn decrypt_firmware(
     let key = info.encryption_key()
         .context("Failed to compute encryption key")?;
 
-    debug!("Firmware encryption key: {:?}", key);
+    debug!("Firmware encryption key: {key:?}");
 
     let crc32 = task::spawn_blocking(move || crc32_and_decrypt(
         input_file,
@@ -440,7 +440,7 @@ fn open_or_create(
                 (Err(e), open_path)
             };
 
-            Ok((r.context(format!("Could not open file: {:?}", p))?, false))
+            Ok((r.context(format!("Could not open file: {p:?}"))?, false))
         }
     }
 }
@@ -449,7 +449,7 @@ fn open_or_create(
 fn delete_if_exists(path: &Path) -> Result<()> {
     if let Err(e) = fs::remove_file(path) {
         if e.kind() != io::ErrorKind::NotFound {
-            return Err(e).context(format!("Failed to delete file: {:?}", path));
+            return Err(e).context(format!("Failed to delete file: {path:?}"));
         }
     }
 
@@ -531,7 +531,7 @@ impl FromStr for NumChunks {
             return Err(anyhow!("value cannot be 0"));
         } else if n > MAX_RANGES as u64 {
             // Same limit as aria2 to avoid unintentional DoS
-            return Err(anyhow!("too many chunks (>{})", MAX_RANGES));
+            return Err(anyhow!("too many chunks (>{MAX_RANGES})"));
         }
 
         Ok(Self(n))
@@ -546,7 +546,7 @@ struct Config {
 
 fn default_config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|mut p| {
-        p.push(format!("{}.conf", PKG_NAME));
+        p.push(format!("{PKG_NAME}.conf"));
         p
     })
 }
@@ -563,13 +563,13 @@ fn load_config_file(user_path: Option<&Path>) -> Result<Option<Config>> {
                     return if e.kind() == io::ErrorKind::NotFound {
                         Ok(None)
                     } else {
-                        Err(e).context(format!("Could not open file: {:?}", p))
+                        Err(e).context(format!("Could not open file: {p:?}"))
                     };
                 }
             };
 
             let config = serde_json::from_reader(file)
-                .context(format!("Could not parse config file: {:?}", p))?;
+                .context(format!("Could not parse config file: {p:?}"))?;
 
             Ok(Some(config))
         }
@@ -684,23 +684,23 @@ async fn main() -> Result<()> {
     let opts = Opts::parse();
 
     if let Some(l) = opts.loglevel {
-        std::env::set_var("RUST_LOG", format!("{}={},samfuslib={}", PKG_NAME, l, l));
+        std::env::set_var("RUST_LOG", format!("{PKG_NAME}={l},samfuslib={l}"));
     }
 
     env_logger::init();
     let log_keys_var = format!("{}_LOG_KEYS", PKG_NAME.to_uppercase());
     let log_keys = matches!(env::var(log_keys_var), Ok(v) if v == "true");
 
-    debug!("Arguments: {:#?}", opts);
+    debug!("Arguments: {opts:#?}");
 
     let config = load_config_file(opts.config.as_deref())?;
     if log_keys {
-        debug!("Config: {:#?}", config);
+        debug!("Config: {config:#?}");
     }
 
     let keys = load_keys(&opts, &config)?;
     if log_keys {
-        debug!("Keys: {:?}", keys);
+        debug!("Keys: {keys:?}");
     }
 
     let client_builder = FusClientBuilder::new(keys)
@@ -716,7 +716,7 @@ async fn main() -> Result<()> {
         opts.firmware_type == FirmwareType::Factory,
     ).await.context("Failed to query firmware information")?);
 
-    debug!("Full firmware info: {:#?}", info);
+    debug!("Full firmware info: {info:#?}");
 
     println!("Firmware info:");
     println!("- Model: {} ({})", info.model, info.model_name);
@@ -735,13 +735,13 @@ async fn main() -> Result<()> {
     let download_path = add_extension(&output_path, &ext);
     let download_path_temp = add_extension(&download_path, DOWNLOAD_EXT);
 
-    debug!("Output path (final): {:?}", output_path);
-    debug!("Output path (temp): {:?}", output_path_temp);
-    debug!("Download path (final): {:?}", download_path);
-    debug!("Download path (temp): {:?}", download_path_temp);
+    debug!("Output path (final): {output_path:?}");
+    debug!("Output path (temp): {output_path_temp:?}");
+    debug!("Download path (final): {download_path:?}");
+    debug!("Download path (temp): {download_path_temp:?}");
 
     if output_path.exists() && !opts.force {
-        eprintln!("{:?} already exists. Use -f/--force to overwrite.", output_path);
+        eprintln!("{output_path:?} already exists. Use -f/--force to overwrite.");
         return Ok(());
     }
 
@@ -782,7 +782,7 @@ async fn main() -> Result<()> {
             )
         };
 
-        debug!("Download ranges: {:#?}", chunks);
+        debug!("Download ranges: {chunks:#?}");
 
         let complete = download_chunks(
             client_builder.clone(),
@@ -798,14 +798,14 @@ async fn main() -> Result<()> {
         }
 
         rename_atomic(&download_path_temp, &download_path)
-            .context(format!("Could not move {:?} to {:?}", download_path_temp, download_path))?;
+            .context(format!("Could not move {download_path_temp:?} to {download_path:?}"))?;
     }
 
     debug!("Truncating to {} bytes to strip state block", info.size);
     file.set_len(info.size).context("Could not set file size")?;
 
     let decrypted_file = File::create(&output_path_temp)
-        .context(format!("Could not open file: {:?}", output_path_temp))?;
+        .context(format!("Could not open file: {output_path_temp:?}"))?;
 
     debug!("Decrypting firmware and validating CRC32");
 
@@ -816,7 +816,7 @@ async fn main() -> Result<()> {
     }
 
     rename_atomic(&output_path_temp, &output_path)
-        .context(format!("Could not move {:?} to {:?}", output_path_temp, output_path))?;
+        .context(format!("Could not move {output_path_temp:?} to {output_path:?}"))?;
 
     Ok(())
 }

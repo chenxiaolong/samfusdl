@@ -24,7 +24,7 @@ pub fn read_at(file: &mut File, buf: &mut [u8], offset: u64) -> io::Result<usize
 /// position may be changed depending on the OS. The EOF is reached before the
 /// reads are complete, [`std::io::ErrorKind::UnexpectedEof`] is returned.
 pub fn read_all_at(file: &mut File, mut buf: &mut [u8], mut offset: u64) -> io::Result<()> {
-    trace!("Reading {} bytes at offset {}", buf.len(), offset);
+    trace!("Reading {} bytes at offset {offset}", buf.len());
 
     while !buf.is_empty() {
         let n = read_at(file, buf, offset)?;
@@ -57,7 +57,7 @@ pub fn write_at(file: &mut File, buf: &[u8], offset: u64) -> io::Result<usize> {
 /// may be changed depending on the OS. The EOF is reached before the writes are
 /// complete, [`std::io::ErrorKind::UnexpectedEof`] is returned.
 pub fn write_all_at(file: &mut File, mut buf: &[u8], mut offset: u64) -> io::Result<()> {
-    trace!("Writing {} bytes at offset {}", buf.len(), offset);
+    trace!("Writing {} bytes at offset {offset}", buf.len());
 
     while !buf.is_empty() {
         let n = write_at(file, buf, offset)?;

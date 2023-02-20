@@ -25,14 +25,8 @@ impl FwVersion {
         Self {
             pda: pda.to_owned(),
             csc: csc.to_owned(),
-            phone: match phone {
-                Some(s) => s.to_owned(),
-                None => pda.to_owned(),
-            },
-            data: match data {
-                Some(s) => s.to_owned(),
-                None => pda.to_owned(),
-            },
+            phone: phone.map_or_else(|| pda.to_owned(), |s| s.to_owned()),
+            data: data.map_or_else(|| pda.to_owned(), |s| s.to_owned()),
         }
     }
 }

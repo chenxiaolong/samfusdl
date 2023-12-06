@@ -29,7 +29,7 @@ use xmltree::{Element, XMLNode};
 
 const FOTA_BASE_URL: &str = "https://fota-cloud-dn.ospserver.net";
 const FUS_BASE_URL: &str = "https://neofussvr.sslcs.cdngc.net";
-const DOWNLOAD_BASE_URL: &str = "http://cloud-neofussvr.sslcs.cdngc.net";
+const DOWNLOAD_BASE_URL: &str = "https://cloud-neofussvr.samsungmobile.com";
 const NON_UTF8_MSG: &str = "[Non-UTF-8 data]";
 
 fn to_utf8_or_error_string(data: &[u8]) -> &str {

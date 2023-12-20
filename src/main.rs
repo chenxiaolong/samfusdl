@@ -328,6 +328,7 @@ async fn get_firmware_info(
     model: &str,
     region: &str,
     version: Option<FwVersion>,
+    imei_serial: &str,
     factory: bool,
 ) -> Result<FirmwareInfo> {
     let mut client = client_builder.build()
@@ -336,7 +337,8 @@ async fn get_firmware_info(
         Some(v) => v,
         None => client.get_latest_version(model, region).await?,
     };
-    let info = client.get_firmware_info(model, region, &fw_version, factory).await?;
+    let info = client.get_firmware_info(
+        model, region, &fw_version, imei_serial, factory).await?;
 
     Ok(info)
 }
@@ -595,6 +597,13 @@ struct Opts {
     /// the latest available version is queried from the FOTA server.
     #[clap(short, long)]
     version: Option<FwVersion>,
+    /// IMEI/serial number
+    ///
+    /// This is required by FUS, which now only serves firmware that matches the
+    /// specified IMEI/serial number. A serial number is accepted only if the
+    /// device has no modem.
+    #[clap(short, long)]
+    imei_serial: String,
     /// Firmware type to download (home or factory)
     ///
     /// This option allows the firmware type (also known as "binary nature") to
@@ -713,6 +722,7 @@ async fn main() -> Result<()> {
         &opts.model,
         &opts.region,
         opts.version,
+        &opts.imei_serial,
         opts.firmware_type == FirmwareType::Factory,
     ).await.context("Failed to query firmware information")?);
 

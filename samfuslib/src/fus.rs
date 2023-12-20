@@ -88,12 +88,8 @@ impl Authorization {
     /// auth mechanism enabled.
     fn with_signature(signature: &str) -> Self {
         Self {
-            nonce: Default::default(),
             signature: signature.to_string(),
-            nc: Default::default(),
-            type_: Default::default(),
-            realm: Default::default(),
-            newauth: true,
+            ..Default::default()
         }
     }
 }
@@ -482,10 +478,12 @@ impl FusClient {
         model: &str,
         region: &str,
         version: &FwVersion,
+        imei_serial: &str,
         factory: bool,
     ) -> Result<FirmwareInfo, FusError> {
         let nonce = self.ensure_nonce().await?;
-        let req_root = Self::create_binary_inform_elem(model, region, version, nonce, factory);
+        let req_root = Self::create_binary_inform_elem(
+            model, region, version, imei_serial, nonce, factory);
 
         let url = format!("{FUS_BASE_URL}/NF_DownloadBinaryInform.do");
         let resp_root = self.execute_fus_xml_request(&url, &req_root, false).await?;
@@ -603,6 +601,7 @@ impl FusClient {
         model: &str,
         region: &str,
         version: &FwVersion,
+        imei_serial: &str,
         nonce: Nonce,
         binary_nature: bool,
     ) -> Element {
@@ -615,7 +614,11 @@ impl FusClient {
         put.children.push(Self::create_data_node("ACCESS_MODE", "2"));
         put.children.push(Self::create_data_node("BINARY_NATURE",
             if binary_nature { "1" } else { "0" }));
+        // Must exist, but can have any value.
         put.children.push(Self::create_data_node("CLIENT_PRODUCT", "Smart Switch"));
+        // Must exist and be non-empty.
+        put.children.push(Self::create_data_node("CLIENT_VERSION", "4.3.23123_1"));
+        put.children.push(Self::create_data_node("DEVICE_IMEI_PUSH", imei_serial));
         put.children.push(Self::create_data_node("DEVICE_MODEL_NAME", model));
         put.children.push(Self::create_data_node("DEVICE_LOCAL_CODE", region));
         put.children.push(Self::create_data_node("DEVICE_FW_VERSION", &version.to_string()));

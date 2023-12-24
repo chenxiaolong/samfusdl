@@ -610,6 +610,11 @@ struct Opts {
     /// be selected. By default, the "home" firmware is downloaded.
     #[clap(short = 't', default_value_t, value_enum)]
     firmware_type: FirmwareType,
+    /// Print out the firmware information only
+    ///
+    /// The firmware will not actually be downloaded.
+    #[clap(long)]
+    print_only: bool,
     /// Output path for decrypted firmware
     ///
     /// By default, the output path is the filename returned by the server. This
@@ -738,6 +743,10 @@ async fn main() -> Result<()> {
     println!("- Size: {} bytes", info.size);
     println!("- CRC32: {:08X}", info.crc);
     println!("- Date: {}", info.last_modified);
+
+    if opts.print_only {
+        return Ok(());
+    }
 
     let (default_filename, ext) = info.split_filename();
     let output_path = opts.output.unwrap_or_else(|| Path::new(&default_filename).to_owned());

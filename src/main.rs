@@ -602,7 +602,7 @@ struct Opts {
     /// This is required by FUS, which now only serves firmware that matches the
     /// specified IMEI/serial number. A serial number is accepted only if the
     /// device has no modem.
-    #[clap(short, long)]
+    #[clap(short, long, default_value = "00000000000000")]
     imei_serial: String,
     /// Firmware type to download (home or factory)
     ///

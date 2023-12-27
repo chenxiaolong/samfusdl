@@ -58,8 +58,10 @@ Once you have the keys, there are a few different ways to make them available to
 To download the latest firmware for a device, run:
 
 ```
-samfusdl -m <model> -r <region>
+samfusdl -m <model> -r <region> -i <IMEI/serial number>
 ```
+
+FUS now requires the IMEI or serial number (for devices without a modem) to be specified. It is no longer possible to download arbitrary firmware for any device.
 
 To download a specific firmware version, add the `-v`/`--version` argument. The version string is in the form: `<PDA>/<CSC>/<Phone>/<Data>`. For most devices, the shorthand `<PDA>/<CSC>` can be used because `<Phone>` and `<Data>` have the same value as `<PDA>`.
 

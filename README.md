@@ -1,3 +1,5 @@
+**2024-03-10 Update**: Due to Samsung's increasing disdain for folks who like to tinker with custom firmware, I'm getting rid of all my Samsung Android devices. Thus, this project is no longer in development.
+
 # samfusdl
 
 samfusdl is an unofficial tool for downloading firmware images from Samsung's FUS (firmware update service).
